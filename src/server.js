@@ -14,6 +14,8 @@ fs.mkdirSync(RELEASES_DIR, { recursive: true });
 fs.mkdirSync(TMP_DIR, { recursive: true });
 app.use('/releases', express.static(RELEASES_DIR));
 
+// Résout avec stderr (ffmpeg y écrit sa progression même en cas de succès ; utile pour
+// le message d'erreur en cas d'échec).
 function run(cmd, args) {
   return new Promise((resolve, reject) => {
     const proc = spawn(cmd, args);
@@ -21,6 +23,22 @@ function run(cmd, args) {
     proc.stderr.on('data', (d) => { stderr += d.toString(); });
     proc.on('close', (code) => {
       if (code === 0) resolve(stderr);
+      else reject(new Error(`${cmd} exited ${code}: ${stderr.slice(-2000)}`));
+    });
+  });
+}
+
+// Résout avec stdout — pour les commandes dont la vraie valeur de retour (ex. ffprobe
+// -of csv) est imprimée sur la sortie standard, pas sur stderr.
+function runCapture(cmd, args) {
+  return new Promise((resolve, reject) => {
+    const proc = spawn(cmd, args);
+    let stdout = '';
+    let stderr = '';
+    proc.stdout.on('data', (d) => { stdout += d.toString(); });
+    proc.stderr.on('data', (d) => { stderr += d.toString(); });
+    proc.on('close', (code) => {
+      if (code === 0) resolve(stdout);
       else reject(new Error(`${cmd} exited ${code}: ${stderr.slice(-2000)}`));
     });
   });
@@ -98,11 +116,11 @@ app.post('/compose', async (req, res) => {
       downloadTo(videoUrl, videoPath),
     ]);
 
-    const durationOut = await run('ffprobe', [
+    const durationOut = await runCapture('ffprobe', [
       '-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', audioPath,
     ]);
     const durationSec = parseFloat(durationOut);
-    if (!durationSec) throw new Error('Impossible de déterminer la durée audio');
+    if (!durationSec) throw new Error(`Impossible de déterminer la durée audio (ffprobe a renvoyé : "${durationOut.trim()}")`);
 
     const timedCaptions = withTiming(captions, durationSec);
     await fsp.writeFile(srtPath, buildSrt(timedCaptions), 'utf8');
