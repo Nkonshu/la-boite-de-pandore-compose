@@ -1,0 +1,12 @@
+{
+  "name": "la-boite-de-pandore-compose",
+  "version": "1.0.0",
+  "description": "Service de composition vidéo (voix off + sous-titres + visuel) pour le pipeline n8n La Boîte de Pandore",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}
