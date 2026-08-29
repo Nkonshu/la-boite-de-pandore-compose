@@ -43,7 +43,26 @@ function srtTime(sec) {
   return `${pad(h)}:${pad(m)}:${pad(s)},${pad(msRem, 3)}`;
 }
 
-// captions: [{ text, start, end }] (secondes, déjà calées sur la durée de la voix off)
+// captions: [{ text, start, end }] (secondes) OU [{ text }] / ["texte"] sans timing —
+// dans ce cas la durée réelle de l'audio (mesurée par ffprobe) est répartie au prorata
+// du nombre de caractères de chaque segment, plus fiable qu'une estimation de débit de
+// parole calculée en amont dans n8n avant même que la voix off n'existe.
+function withTiming(captions, totalDurationSec) {
+  if (captions.every((c) => typeof c === 'object' && typeof c.start === 'number' && typeof c.end === 'number')) {
+    return captions;
+  }
+  const texts = captions.map((c) => (typeof c === 'string' ? c : c.text));
+  const totalChars = texts.reduce((sum, t) => sum + t.length, 0) || 1;
+  let cursor = 0;
+  return texts.map((text) => {
+    const share = (text.length / totalChars) * totalDurationSec;
+    const start = cursor;
+    const end = Math.min(totalDurationSec, cursor + share);
+    cursor = end;
+    return { text, start, end };
+  });
+}
+
 function buildSrt(captions) {
   return captions.map((c, i) =>
     `${i + 1}\n${srtTime(c.start)} --> ${srtTime(c.end)}\n${c.text}\n`
@@ -78,12 +97,15 @@ app.post('/compose', async (req, res) => {
       downloadTo(audioUrl, audioPath),
       downloadTo(videoUrl, videoPath),
     ]);
-    await fsp.writeFile(srtPath, buildSrt(captions), 'utf8');
 
     const durationOut = await run('ffprobe', [
       '-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', audioPath,
     ]);
-    const durationSec = parseFloat(durationOut) || captions[captions.length - 1].end;
+    const durationSec = parseFloat(durationOut);
+    if (!durationSec) throw new Error('Impossible de déterminer la durée audio');
+
+    const timedCaptions = withTiming(captions, durationSec);
+    await fsp.writeFile(srtPath, buildSrt(timedCaptions), 'utf8');
 
     const subtitlesFilter = `subtitles=${escapeForFilter(srtPath)}:force_style='FontName=DejaVu Sans,FontSize=22,Bold=1,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BorderStyle=3,Outline=2,Shadow=0,Alignment=2,MarginV=190'`;
 
