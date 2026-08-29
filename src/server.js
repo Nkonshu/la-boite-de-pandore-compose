@@ -96,7 +96,7 @@ app.post('/compose', async (req, res) => {
       '-map', '[v]', '-map', '1:a',
       '-c:v', 'libx264', '-preset', 'medium', '-crf', '23',
       '-c:a', 'aac', '-b:a', '192k',
-      '-shortest',
+      '-t', String(durationSec),
       outPath,
     ]);
 
