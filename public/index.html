@@ -92,13 +92,23 @@
   .promo-note { text-align: center; font-size: 11px; color: var(--mute-dim); margin-bottom: 8px; }
 
   /* Pain agitation */
-  .pain-list { display: flex; flex-direction: column; gap: 0; margin-top: 24px; }
-  .pain-item { padding: 16px 0; border-bottom: 1px solid var(--border); font-size: 15.5px; line-height: 1.6; }
+  .pain-list { display: flex; flex-direction: column; gap: 0; margin-top: 28px; }
+  .pain-item {
+    padding: 22px 0; border-bottom: 1px solid var(--border);
+    font-family: 'Instrument Sans', sans-serif; font-size: 21px; font-weight: 500;
+    line-height: 1.35; color: var(--mute); letter-spacing: -0.005em;
+  }
   .pain-item:first-child { padding-top: 0; }
-  .pain-item strong { color: var(--text); }
+  .pain-item strong { color: var(--text); font-weight: 700; }
+
+  /* Punchline — grande phrase isolée, meme traitement que les citations de recadrage */
+  .punchline {
+    font-family: 'Instrument Sans', sans-serif; font-size: 24px; font-weight: 600;
+    line-height: 1.4; margin-top: 28px; color: var(--text);
+  }
 
   /* Reframe */
-  .reframe-quote { font-family: 'Instrument Sans', sans-serif; font-size: 22px; font-weight: 600; line-height: 1.45; margin-bottom: 16px; }
+  .reframe-quote { font-family: 'Instrument Sans', sans-serif; font-size: 28px; font-weight: 600; line-height: 1.35; margin-bottom: 20px; letter-spacing: -0.01em; }
   .reframe-quote em { color: var(--accent); font-style: normal; }
 
   /* Cost comparison */
@@ -112,8 +122,8 @@
   .stat-source { font-size: 10.5px; color: var(--mute-dim); margin-top: 10px; }
 
   /* Sections generic */
-  .section-title { font-size: 26px; font-weight: 700; margin-bottom: 14px; }
-  .section-body { color: var(--mute); font-size: 15px; line-height: 1.7; margin-bottom: 28px; }
+  .section-title { font-size: 32px; font-weight: 700; margin-bottom: 16px; letter-spacing: -0.015em; }
+  .section-body { color: var(--mute); font-size: 17px; line-height: 1.65; margin-bottom: 30px; }
 
   .layers { position: relative; display: flex; flex-direction: column; gap: 26px; }
   .layers::before {
@@ -126,63 +136,39 @@
     background: var(--surface-raised); border: 1px solid var(--accent);
     display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12.5px; color: var(--accent);
   }
-  .layer h3 { font-size: 15.5px; font-weight: 700; margin-bottom: 5px; padding-top: 4px; }
-  .layer p { font-size: 13.5px; color: var(--mute); line-height: 1.6; }
+  .layer h3 { font-size: 18px; font-weight: 700; margin-bottom: 6px; padding-top: 4px; }
+  .layer p { font-size: 15.5px; color: var(--mute); line-height: 1.55; }
 
   /* Qualification */
   .qual-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 24px; }
-  .qual-card { border-radius: 18px; padding: 22px 20px; border: 1px solid var(--border); }
+  .qual-card { border-radius: 18px; padding: 24px 22px; border: 1px solid var(--border); }
   .qual-card.no { background: rgba(226,104,90,0.05); border-color: rgba(226,104,90,0.25); }
   .qual-card.yes { background: rgba(61,189,140,0.05); border-color: rgba(61,189,140,0.25); }
-  .qual-title { font-size: 13px; font-weight: 700; margin-bottom: 14px; }
+  .qual-title { font-size: 13.5px; font-weight: 700; margin-bottom: 16px; letter-spacing: 0.04em; }
   .qual-card.no .qual-title { color: var(--bad); }
   .qual-card.yes .qual-title { color: var(--good); }
-  .qual-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 12px; }
-  .qual-list li { font-size: 13px; line-height: 1.55; color: var(--text); display: flex; gap: 10px; }
+  .qual-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 14px; }
+  .qual-list li { font-size: 15px; line-height: 1.5; color: var(--text); display: flex; gap: 10px; }
   .qual-list li::before { flex-shrink: 0; font-weight: 700; margin-top: 1px; }
   .qual-card.no .qual-list li::before { content: '✕'; color: var(--bad); }
   .qual-card.yes .qual-list li::before { content: '✓'; color: var(--good); }
 
   /* Services */
   .services { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-  .service-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 20px; }
-  .service-card h3 { font-size: 14.5px; font-weight: 700; margin-bottom: 8px; }
-  .service-card p { font-size: 12.5px; color: var(--mute); line-height: 1.6; }
-
-  /* Proof */
-  .proof-box { background: var(--surface); border: 1px solid var(--border); border-radius: 18px; padding: 26px 24px; }
-  .proof-box p { font-size: 14.5px; color: var(--mute); line-height: 1.7; }
-  .proof-box p + p { margin-top: 12px; }
-  .proof-box strong { color: var(--text); }
-
-  /* Pricing */
-  .draft-badge {
-    display: inline-flex; align-items: center; gap: 7px; background: rgba(232,163,61,0.12); border: 1px solid rgba(232,163,61,0.35);
-    color: var(--accent); font-size: 11.5px; font-weight: 700; padding: 7px 14px; border-radius: 999px; margin-bottom: 22px;
-  }
-  .price-stack-line { display: flex; justify-content: space-between; align-items: baseline; padding: 6px 0; font-size: 13.5px; }
-  .pricing-grid { display: flex; flex-direction: column; gap: 14px; }
-  .price-card { background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 26px 24px; }
-  .price-card.featured { border-color: rgba(232,163,61,0.4); background: linear-gradient(180deg, rgba(232,163,61,0.07), rgba(232,163,61,0.01)); }
-  .price-top { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 10px; }
-  .price-name { font-size: 16px; font-weight: 700; }
-  .price-value { font-family: 'Instrument Sans', sans-serif; font-weight: 700; font-size: 20px; color: var(--accent); }
-  .price-desc { font-size: 13px; color: var(--mute); margin-bottom: 16px; line-height: 1.6; }
-  .price-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 9px; }
-  .price-list li { font-size: 13px; color: var(--text); display: flex; gap: 9px; align-items: flex-start; }
-  .price-list li::before { content: '—'; color: var(--accent); flex-shrink: 0; }
-  .promo-tag { display: inline-block; font-size: 10.5px; font-weight: 700; color: var(--accent); background: rgba(232,163,61,0.12); border-radius: 999px; padding: 4px 10px; margin-top: 12px; }
+  .service-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 22px; }
+  .service-card h3 { font-size: 16.5px; font-weight: 700; margin-bottom: 9px; }
+  .service-card p { font-size: 14px; color: var(--mute); line-height: 1.55; }
 
   /* FAQ */
-  .faq-item { border-bottom: 1px solid var(--border); padding: 20px 0; }
+  .faq-item { border-bottom: 1px solid var(--border); padding: 24px 0; }
   .faq-item:first-child { padding-top: 0; }
-  .faq-q { font-size: 14.5px; font-weight: 700; margin-bottom: 8px; }
-  .faq-a { font-size: 13.5px; color: var(--mute); line-height: 1.65; }
+  .faq-q { font-size: 17px; font-weight: 700; margin-bottom: 9px; }
+  .faq-a { font-size: 15px; color: var(--mute); line-height: 1.6; }
 
   /* Final CTA */
-  .final-cta { text-align: center; background: var(--surface); border: 1px solid var(--border); border-radius: 24px; padding: 48px 28px; }
-  .final-cta h2 { font-size: 24px; margin-bottom: 12px; }
-  .final-cta p { color: var(--mute); font-size: 14.5px; margin-bottom: 26px; }
+  .final-cta { text-align: center; background: var(--surface); border: 1px solid var(--border); border-radius: 24px; padding: 56px 28px; }
+  .final-cta h2 { font-size: 30px; margin-bottom: 14px; letter-spacing: -0.015em; }
+  .final-cta p { color: var(--mute); font-size: 16px; margin-bottom: 30px; }
 
   footer { border-top: 1px solid var(--border); padding: 32px 0 48px; }
   footer p { font-size: 12px; color: var(--mute-dim); line-height: 1.8; text-align: center; }
@@ -228,6 +214,7 @@
         <div class="pain-item">Vous payez quelqu'un pour <strong>poster</strong>, pas pour <strong>réfléchir</strong> à ce qui devrait être dit.</div>
         <div class="pain-item">Vous passez plus de temps à <strong>gérer un calendrier éditorial</strong> qu'à développer votre activité.</div>
       </div>
+      <p class="punchline">Si vous payez quelqu'un pour publier, pas pour réfléchir, vous payez pour du temps — pas pour un résultat.</p>
     </section>
   </div>
 
