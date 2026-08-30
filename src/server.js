@@ -7,6 +7,7 @@ const { spawn } = require('child_process');
 
 const app = express();
 app.use(express.json({ limit: '2mb' }));
+app.use(express.static(path.join(__dirname, '..', 'public')));
 
 const RELEASES_DIR = path.join(__dirname, '..', 'releases');
 const TMP_DIR = path.join(__dirname, '..', 'tmp');

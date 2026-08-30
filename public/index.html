@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>La Boîte de Pandore — Automatisation réseaux sociaux</title>
+<meta name="description" content="Remplacez un community manager à temps plein par un système IA qui trouve les idées, écrit, produit et publie — sous contrôle qualité automatisé.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0B0D10;
+    --surface: #14171C;
+    --surface-raised: #1C2027;
+    --accent: #E8A33D;
+    --accent-deep: #B87B22;
+    --good: #3DBD8C;
+    --text: #F3F1EC;
+    --mute: #8B909A;
+    --mute-dim: #5B616B;
+    --border: #262B33;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'IBM Plex Sans', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1, h2, h3 { font-family: 'Instrument Sans', 'IBM Plex Sans', sans-serif; margin: 0; text-wrap: balance; }
+  p { margin: 0; }
+  a { color: inherit; }
+  .num { font-variant-numeric: tabular-nums; }
+
+  .wrap { max-width: 720px; margin: 0 auto; padding: 0 24px; }
+  section { padding: 64px 0; }
+  .eyebrow { font-size: 12px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); margin-bottom: 14px; }
+
+  .glow {
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background: radial-gradient(600px 400px at 50% -10%, rgba(232,163,61,0.14), transparent 60%);
+  }
+  main { position: relative; z-index: 1; }
+
+  /* Hero */
+  .hero { padding: 90px 0 70px; text-align: center; }
+  .mark { width: 56px; height: 56px; margin: 0 auto 28px; position: relative; }
+  .mark-ring { position: absolute; inset: 0; border-radius: 999px; border: 2px solid var(--accent); }
+  .mark-ring::after { content:''; position:absolute; inset: -6px; border-radius: 999px; border: 1px solid rgba(232,163,61,0.3); }
+  .mark-dot { position: absolute; inset: 0; margin: auto; width: 8px; height: 8px; border-radius: 999px; background: var(--accent); box-shadow: 0 0 18px 4px rgba(232,163,61,0.6); }
+
+  h1.hero-title { font-size: 40px; font-weight: 700; line-height: 1.15; letter-spacing: -0.01em; margin-bottom: 18px; }
+  h1.hero-title span { color: var(--accent); }
+  .hero-sub { font-size: 17px; color: var(--mute); max-width: 480px; margin: 0 auto 34px; line-height: 1.6; }
+
+  .cta {
+    display: inline-flex; align-items: center; gap: 10px; justify-content: center;
+    background: var(--accent); color: #201404; font-weight: 700; font-size: 15px;
+    padding: 15px 28px; border-radius: 999px; text-decoration: none;
+    box-shadow: 0 14px 30px -14px rgba(232,163,61,0.6);
+  }
+  .cta-ghost {
+    display: inline-flex; align-items: center; gap: 8px; justify-content: center;
+    background: transparent; color: var(--text); font-weight: 600; font-size: 14px;
+    padding: 14px 22px; border-radius: 999px; border: 1px solid var(--border); text-decoration: none;
+  }
+  .cta-row { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+
+  /* Cost comparison */
+  .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 32px; }
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 18px; padding: 22px 20px; text-align: center; }
+  .stat-card.accent { border-color: rgba(61,189,140,0.35); background: rgba(61,189,140,0.06); }
+  .stat-num { font-family: 'Instrument Sans', sans-serif; font-weight: 700; font-size: 28px; margin-bottom: 6px; }
+  .stat-card .stat-num { color: var(--text); }
+  .stat-card.accent .stat-num { color: var(--good); }
+  .stat-label { font-size: 12.5px; color: var(--mute); line-height: 1.5; }
+  .stat-source { font-size: 10.5px; color: var(--mute-dim); margin-top: 10px; }
+
+  /* Sections generic */
+  .section-title { font-size: 26px; font-weight: 700; margin-bottom: 14px; }
+  .section-body { color: var(--mute); font-size: 15px; line-height: 1.7; margin-bottom: 28px; }
+
+  .layers { display: flex; flex-direction: column; gap: 10px; }
+  .layer { display: flex; gap: 14px; align-items: flex-start; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 18px 20px; }
+  .layer-num { flex-shrink: 0; width: 30px; height: 30px; border-radius: 999px; background: var(--surface-raised); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12.5px; color: var(--accent); }
+  .layer h3 { font-size: 15px; font-weight: 700; margin-bottom: 5px; }
+  .layer p { font-size: 13.5px; color: var(--mute); line-height: 1.6; }
+
+  /* Services */
+  .services { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .service-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 20px; }
+  .service-card h3 { font-size: 14.5px; font-weight: 700; margin-bottom: 8px; }
+  .service-card p { font-size: 12.5px; color: var(--mute); line-height: 1.6; }
+
+  /* Pricing */
+  .draft-badge {
+    display: inline-flex; align-items: center; gap: 7px; background: rgba(232,163,61,0.12); border: 1px solid rgba(232,163,61,0.35);
+    color: var(--accent); font-size: 11.5px; font-weight: 700; padding: 7px 14px; border-radius: 999px; margin-bottom: 22px;
+  }
+  .pricing-grid { display: flex; flex-direction: column; gap: 14px; }
+  .price-card { background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 26px 24px; }
+  .price-card.featured { border-color: rgba(232,163,61,0.4); background: linear-gradient(180deg, rgba(232,163,61,0.07), rgba(232,163,61,0.01)); }
+  .price-top { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 10px; }
+  .price-name { font-size: 16px; font-weight: 700; }
+  .price-value { font-family: 'Instrument Sans', sans-serif; font-weight: 700; font-size: 20px; color: var(--accent); }
+  .price-desc { font-size: 13px; color: var(--mute); margin-bottom: 16px; line-height: 1.6; }
+  .price-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 9px; }
+  .price-list li { font-size: 13px; color: var(--text); display: flex; gap: 9px; align-items: flex-start; }
+  .price-list li::before { content: '—'; color: var(--accent); flex-shrink: 0; }
+
+  /* FAQ */
+  .faq-item { border-bottom: 1px solid var(--border); padding: 20px 0; }
+  .faq-item:first-child { padding-top: 0; }
+  .faq-q { font-size: 14.5px; font-weight: 700; margin-bottom: 8px; }
+  .faq-a { font-size: 13.5px; color: var(--mute); line-height: 1.65; }
+
+  /* Final CTA */
+  .final-cta { text-align: center; background: var(--surface); border: 1px solid var(--border); border-radius: 24px; padding: 48px 28px; }
+  .final-cta h2 { font-size: 24px; margin-bottom: 12px; }
+  .final-cta p { color: var(--mute); font-size: 14.5px; margin-bottom: 26px; }
+
+  footer { border-top: 1px solid var(--border); padding: 32px 0 48px; }
+  footer p { font-size: 12px; color: var(--mute-dim); line-height: 1.8; text-align: center; }
+  footer a { color: var(--mute); text-decoration: underline; text-underline-offset: 2px; }
+
+  @media (max-width: 560px) {
+    .stat-grid, .services { grid-template-columns: 1fr; }
+    h1.hero-title { font-size: 32px; }
+  }
+</style>
+</head>
+<body>
+<div class="glow"></div>
+<main>
+
+  <div class="wrap">
+    <section class="hero">
+      <div class="mark"><div class="mark-ring"></div><div class="mark-dot"></div></div>
+      <div class="eyebrow">La Boîte de Pandore</div>
+      <h1 class="hero-title">Remplacez votre <span>community manager</span> par un système qui ne dort jamais</h1>
+      <p class="hero-sub">Un pipeline IA qui trouve les idées, écrit, produit et publie vos contenus — avec un contrôle qualité automatisé à chaque étape. Nous le construisons pour vous.</p>
+      <div class="cta-row">
+        <a class="cta" href="mailto:3ilnjeuleu@gmail.com?subject=Audit%20gratuit%20-%20La%20Boite%20de%20Pandore">Réserver un audit gratuit</a>
+        <a class="cta-ghost" href="#tarifs">Voir les tarifs</a>
+      </div>
+    </section>
+  </div>
+
+  <div class="wrap">
+    <section>
+      <div class="eyebrow">Le vrai coût</div>
+      <h2 class="section-title">Un poste à temps plein n'est peut-être pas le bon calibrage</h2>
+      <p class="section-body">Le modèle qui s'impose en 2026 n'est ni « tout humain » ni « tout automatisé » — c'est l'IA qui gère le quotidien, avec une direction humaine ponctuelle plutôt qu'un salaire à temps plein.</p>
+      <div class="stat-grid">
+        <div class="stat-card">
+          <div class="stat-num num">60-80k$/an</div>
+          <div class="stat-label">Coût moyen d'un community manager salarié (salaire + charges)</div>
+          <div class="stat-source">Picmim / Apaya, 2026</div>
+        </div>
+        <div class="stat-card accent">
+          <div class="stat-num num">700-1300$/an</div>
+          <div class="stat-label">Coût d'un système d'automatisation IA complet — plus de 50x moins cher</div>
+          <div class="stat-source">Picmim / Apaya, 2026</div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="wrap">
+    <section>
+      <div class="eyebrow">Comment ça marche</div>
+      <h2 class="section-title">Le même système qui fait tourner nos propres chaînes</h2>
+      <p class="section-body">Ce n'est pas une promesse abstraite — c'est le système exact que nous utilisons pour produire notre propre contenu, à voir en direct sur nos comptes.</p>
+      <div class="layers">
+        <div class="layer">
+          <div class="layer-num">01</div>
+          <div><h3>Stratège</h3><p>Propose plusieurs angles éditoriaux, notés sur l'adéquation à la marque, l'originalité et le potentiel de partage.</p></div>
+        </div>
+        <div class="layer">
+          <div class="layer-num">02</div>
+          <div><h3>Avocat du diable</h3><p>Challenge le choix retenu avant production — évite les angles trop génériques ou déjà utilisés récemment.</p></div>
+        </div>
+        <div class="layer">
+          <div class="layer-num">03</div>
+          <div><h3>Vérificateur de faits</h3><p>Contrôle que chaque chiffre annoncé est réellement traçable à une source vérifiable — aucune statistique inventée.</p></div>
+        </div>
+        <div class="layer">
+          <div class="layer-num">04</div>
+          <div><h3>Critique qualité</h3><p>Note le script sur la force de l'accroche, la clarté et la fidélité aux faits — rejette et relance automatiquement si besoin.</p></div>
+        </div>
+        <div class="layer">
+          <div class="layer-num">05</div>
+          <div><h3>Production &amp; publication</h3><p>Voix off, visuel, montage et sous-titres générés, puis publiés sur vos canaux.</p></div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="wrap">
+    <section>
+      <div class="eyebrow">Ce qu'on construit pour vous</div>
+      <h2 class="section-title">Nos services</h2>
+      <div class="services">
+        <div class="service-card">
+          <h3>Audit de faisabilité</h3>
+          <p>On regarde votre contenu actuel et on identifie précisément ce qui peut être automatisé sans perdre en qualité.</p>
+        </div>
+        <div class="service-card">
+          <h3>Mise en place du pipeline</h3>
+          <p>Construction du système complet (idées → script → voix off → vidéo → publication) adapté à votre marque et vos sujets.</p>
+        </div>
+        <div class="service-card">
+          <h3>Connexion des plateformes</h3>
+          <p>YouTube, TikTok, Instagram, Facebook — publication automatique sur vos comptes existants.</p>
+        </div>
+        <div class="service-card">
+          <h3>Accompagnement continu</h3>
+          <p>Suivi des performances, ajustement des règles éditoriales, rapport hebdomadaire de résultats.</p>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="wrap" id="tarifs">
+    <section>
+      <div class="eyebrow">Tarifs</div>
+      <h2 class="section-title">Trois formules</h2>
+      <div class="draft-badge">Structure indicative — tarifs définitifs communiqués lors de l'audit</div>
+      <div class="pricing-grid">
+        <div class="price-card">
+          <div class="price-top"><div class="price-name">Audit</div><div class="price-value">Gratuit</div></div>
+          <div class="price-desc">Un échange pour évaluer votre situation actuelle et ce qui peut être automatisé.</div>
+          <ul class="price-list">
+            <li>Analyse de votre contenu actuel</li>
+            <li>Estimation du temps/coût économisable</li>
+            <li>Recommandation sans engagement</li>
+          </ul>
+        </div>
+        <div class="price-card featured">
+          <div class="price-top"><div class="price-name">Mise en place</div><div class="price-value">Sur devis</div></div>
+          <div class="price-desc">Construction complète du pipeline adapté à votre marque, formule la plus demandée.</div>
+          <ul class="price-list">
+            <li>Pipeline complet (idée → publication)</li>
+            <li>Connexion à vos comptes réseaux sociaux</li>
+            <li>Contrôle qualité automatisé configuré</li>
+            <li>Formation à l'utilisation du système</li>
+          </ul>
+        </div>
+        <div class="price-card">
+          <div class="price-top"><div class="price-name">Accompagnement</div><div class="price-value">Mensuel</div></div>
+          <div class="price-desc">Suivi continu une fois le système en place.</div>
+          <ul class="price-list">
+            <li>Rapport hebdomadaire de performance</li>
+            <li>Ajustement des règles éditoriales</li>
+            <li>Support prioritaire</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="wrap">
+    <section>
+      <div class="eyebrow">Questions fréquentes</div>
+      <h2 class="section-title">FAQ</h2>
+      <div class="faq-list">
+        <div class="faq-item">
+          <div class="faq-q">Le contenu généré est-il vraiment fiable ?</div>
+          <div class="faq-a">Chaque script passe par un vérificateur de faits dédié avant publication : tout chiffre non traçable à une source réelle est rejeté automatiquement, avec une relance si besoin.</div>
+        </div>
+        <div class="faq-item">
+          <div class="faq-q">Est-ce que ça remplace complètement une personne ?</div>
+          <div class="faq-a">Non — le modèle qui fonctionne le mieux garde une direction humaine ponctuelle (mensuelle ou trimestrielle) pendant que le système gère la production quotidienne.</div>
+        </div>
+        <div class="faq-item">
+          <div class="faq-q">Combien de temps pour la mise en place ?</div>
+          <div class="faq-a">Variable selon la complexité de vos besoins — discuté précisément lors de l'audit gratuit.</div>
+        </div>
+        <div class="faq-item">
+          <div class="faq-q">Sur quelles plateformes ça publie ?</div>
+          <div class="faq-a">YouTube Shorts, TikTok, Instagram Reels et Facebook Reels.</div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="wrap">
+    <section>
+      <div class="final-cta">
+        <h2>Prêt à voir ce que ça donnerait pour vous ?</h2>
+        <p>Audit gratuit, sans engagement.</p>
+        <a class="cta" href="mailto:3ilnjeuleu@gmail.com?subject=Audit%20gratuit%20-%20La%20Boite%20de%20Pandore">Réserver un audit gratuit</a>
+      </div>
+    </section>
+  </div>
+
+  <footer>
+    <div class="wrap">
+      <p>La Boîte de Pandore<br>Contact : <a href="mailto:3ilnjeuleu@gmail.com">3ilnjeuleu@gmail.com</a></p>
+    </div>
+  </footer>
+
+</main>
+</body>
+</html>
