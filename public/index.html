@@ -16,6 +16,7 @@
     --accent: #E8A33D;
     --accent-deep: #B87B22;
     --good: #3DBD8C;
+    --bad: #E2685A;
     --text: #F3F1EC;
     --mute: #8B909A;
     --mute-dim: #5B616B;
@@ -35,7 +36,7 @@
   .num { font-variant-numeric: tabular-nums; }
 
   .wrap { max-width: 720px; margin: 0 auto; padding: 0 24px; }
-  section { padding: 64px 0; }
+  section { padding: 60px 0; }
   .eyebrow { font-size: 12px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); margin-bottom: 14px; }
 
   .glow {
@@ -45,7 +46,7 @@
   main { position: relative; z-index: 1; }
 
   /* Hero */
-  .hero { padding: 90px 0 70px; text-align: center; }
+  .hero { padding: 80px 0 40px; text-align: center; }
   .mark { width: 56px; height: 56px; margin: 0 auto 28px; position: relative; }
   .mark-ring { position: absolute; inset: 0; border-radius: 999px; border: 2px solid var(--accent); }
   .mark-ring::after { content:''; position:absolute; inset: -6px; border-radius: 999px; border: 1px solid rgba(232,163,61,0.3); }
@@ -68,8 +69,32 @@
   }
   .cta-row { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
 
+  /* Promo countdown */
+  .promo-bar {
+    display: flex; align-items: center; gap: 14px; justify-content: center; flex-wrap: wrap;
+    background: var(--surface); border: 1px solid rgba(232,163,61,0.3); border-radius: 999px;
+    padding: 12px 22px; margin: 0 auto 8px; max-width: fit-content;
+  }
+  .promo-bar.inactive { border-color: var(--border); }
+  .promo-dot { width: 8px; height: 8px; border-radius: 999px; background: var(--good); flex-shrink: 0; animation: pulse 1.8s infinite; }
+  .promo-bar.inactive .promo-dot { background: var(--mute-dim); animation: none; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+  .promo-text { font-size: 13px; font-weight: 600; }
+  .promo-time { font-family: 'Instrument Sans', sans-serif; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; }
+  .promo-note { text-align: center; font-size: 11px; color: var(--mute-dim); margin-bottom: 8px; }
+
+  /* Pain agitation */
+  .pain-list { display: flex; flex-direction: column; gap: 0; margin-top: 24px; }
+  .pain-item { padding: 16px 0; border-bottom: 1px solid var(--border); font-size: 15.5px; line-height: 1.6; }
+  .pain-item:first-child { padding-top: 0; }
+  .pain-item strong { color: var(--text); }
+
+  /* Reframe */
+  .reframe-quote { font-family: 'Instrument Sans', sans-serif; font-size: 22px; font-weight: 600; line-height: 1.45; margin-bottom: 16px; }
+  .reframe-quote em { color: var(--accent); font-style: normal; }
+
   /* Cost comparison */
-  .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 32px; }
+  .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 28px; }
   .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 18px; padding: 22px 20px; text-align: center; }
   .stat-card.accent { border-color: rgba(61,189,140,0.35); background: rgba(61,189,140,0.06); }
   .stat-num { font-family: 'Instrument Sans', sans-serif; font-weight: 700; font-size: 28px; margin-bottom: 6px; }
@@ -88,17 +113,35 @@
   .layer h3 { font-size: 15px; font-weight: 700; margin-bottom: 5px; }
   .layer p { font-size: 13.5px; color: var(--mute); line-height: 1.6; }
 
+  /* Qualification */
+  .qual-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 24px; }
+  .qual-card { border-radius: 18px; padding: 22px 20px; border: 1px solid var(--border); }
+  .qual-card.no { background: rgba(226,104,90,0.05); border-color: rgba(226,104,90,0.25); }
+  .qual-card.yes { background: rgba(61,189,140,0.05); border-color: rgba(61,189,140,0.25); }
+  .qual-title { font-size: 13px; font-weight: 700; margin-bottom: 14px; }
+  .qual-card.no .qual-title { color: var(--bad); }
+  .qual-card.yes .qual-title { color: var(--good); }
+  .qual-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 12px; }
+  .qual-list li { font-size: 13px; line-height: 1.55; color: var(--text); }
+
   /* Services */
   .services { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
   .service-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 20px; }
   .service-card h3 { font-size: 14.5px; font-weight: 700; margin-bottom: 8px; }
   .service-card p { font-size: 12.5px; color: var(--mute); line-height: 1.6; }
 
+  /* Proof */
+  .proof-box { background: var(--surface); border: 1px solid var(--border); border-radius: 18px; padding: 26px 24px; }
+  .proof-box p { font-size: 14.5px; color: var(--mute); line-height: 1.7; }
+  .proof-box p + p { margin-top: 12px; }
+  .proof-box strong { color: var(--text); }
+
   /* Pricing */
   .draft-badge {
     display: inline-flex; align-items: center; gap: 7px; background: rgba(232,163,61,0.12); border: 1px solid rgba(232,163,61,0.35);
     color: var(--accent); font-size: 11.5px; font-weight: 700; padding: 7px 14px; border-radius: 999px; margin-bottom: 22px;
   }
+  .price-stack-line { display: flex; justify-content: space-between; align-items: baseline; padding: 6px 0; font-size: 13.5px; }
   .pricing-grid { display: flex; flex-direction: column; gap: 14px; }
   .price-card { background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 26px 24px; }
   .price-card.featured { border-color: rgba(232,163,61,0.4); background: linear-gradient(180deg, rgba(232,163,61,0.07), rgba(232,163,61,0.01)); }
@@ -109,6 +152,7 @@
   .price-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 9px; }
   .price-list li { font-size: 13px; color: var(--text); display: flex; gap: 9px; align-items: flex-start; }
   .price-list li::before { content: '—'; color: var(--accent); flex-shrink: 0; }
+  .promo-tag { display: inline-block; font-size: 10.5px; font-weight: 700; color: var(--accent); background: rgba(232,163,61,0.12); border-radius: 999px; padding: 4px 10px; margin-top: 12px; }
 
   /* FAQ */
   .faq-item { border-bottom: 1px solid var(--border); padding: 20px 0; }
@@ -126,7 +170,7 @@
   footer a { color: var(--mute); text-decoration: underline; text-underline-offset: 2px; }
 
   @media (max-width: 560px) {
-    .stat-grid, .services { grid-template-columns: 1fr; }
+    .stat-grid, .services, .qual-grid { grid-template-columns: 1fr; }
     h1.hero-title { font-size: 32px; }
   }
 </style>
@@ -146,13 +190,32 @@
         <a class="cta-ghost" href="#tarifs">Voir les tarifs</a>
       </div>
     </section>
+
+    <div id="promoBar" class="promo-bar">
+      <div class="promo-dot"></div>
+      <div class="promo-text"><span id="promoLabel">Fenêtre de lancement active</span> — <span id="promoTimeLabel">se termine dans</span> <span class="promo-time" id="promoTime">--</span></div>
+    </div>
+    <div class="promo-note" id="promoNote">Cette fenêtre revient tous les 14 jours, pendant 3 jours.</div>
+  </div>
+
+  <div class="wrap">
+    <section>
+      <div class="eyebrow">Ça vous parle ?</div>
+      <h2 class="section-title">Le quotidien avec un community manager classique</h2>
+      <div class="pain-list">
+        <div class="pain-item">Vous republiez le même post trois fois parce que <strong>personne n'a pensé à le programmer</strong>.</div>
+        <div class="pain-item">Vous cherchez une idée à 23h parce que <strong>rien n'est prêt pour demain</strong>.</div>
+        <div class="pain-item">Vous payez quelqu'un pour <strong>poster</strong>, pas pour <strong>réfléchir</strong> à ce qui devrait être dit.</div>
+        <div class="pain-item">Vous passez plus de temps à <strong>gérer un calendrier éditorial</strong> qu'à développer votre activité.</div>
+      </div>
+    </section>
   </div>
 
   <div class="wrap">
     <section>
       <div class="eyebrow">Le vrai coût</div>
-      <h2 class="section-title">Un poste à temps plein n'est peut-être pas le bon calibrage</h2>
-      <p class="section-body">Le modèle qui s'impose en 2026 n'est ni « tout humain » ni « tout automatisé » — c'est l'IA qui gère le quotidien, avec une direction humaine ponctuelle plutôt qu'un salaire à temps plein.</p>
+      <p class="reframe-quote">Le vrai plafond de votre présence en ligne n'est pas votre créativité — <em>c'est le temps qu'il faut pour tout produire à la main.</em></p>
+      <p class="section-body">Programmer un post à la main en 2026, c'est écrire une lettre pendant que tout le monde envoie un message. Vous pouvez continuer à tout faire vous-même. Ou construire un système qui le fait pendant que vous dormez.</p>
       <div class="stat-grid">
         <div class="stat-card">
           <div class="stat-num num">60-80k$/an</div>
@@ -171,8 +234,8 @@
   <div class="wrap">
     <section>
       <div class="eyebrow">Comment ça marche</div>
-      <h2 class="section-title">Le même système qui fait tourner nos propres chaînes</h2>
-      <p class="section-body">Ce n'est pas une promesse abstraite — c'est le système exact que nous utilisons pour produire notre propre contenu, à voir en direct sur nos comptes.</p>
+      <h2 class="section-title">On ne vend pas une promesse — on montre le système</h2>
+      <p class="section-body">Pas de méthode abstraite. C'est le système exact que nous utilisons pour produire notre propre contenu, à voir en direct sur nos comptes.</p>
       <div class="layers">
         <div class="layer">
           <div class="layer-num">01</div>
@@ -193,6 +256,31 @@
         <div class="layer">
           <div class="layer-num">05</div>
           <div><h3>Production &amp; publication</h3><p>Voix off, visuel, montage et sous-titres générés, puis publiés sur vos canaux.</p></div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="wrap">
+    <section>
+      <div class="eyebrow">Pour qui</div>
+      <h2 class="section-title">Soyons clairs, pour ne pas perdre de temps</h2>
+      <div class="qual-grid">
+        <div class="qual-card no">
+          <div class="qual-title">CE N'EST PAS POUR VOUS SI</div>
+          <ul class="qual-list">
+            <li>Vous cherchez un bouton magique, sans jamais valider ce qui sort du système.</li>
+            <li>Vous n'avez encore aucune ligne éditoriale — le système amplifie une direction existante, il ne l'invente pas à votre place.</li>
+            <li>Vous préférez tout contrôler vous-même, poste par poste.</li>
+          </ul>
+        </div>
+        <div class="qual-card yes">
+          <div class="qual-title">C'EST POUR VOUS SI</div>
+          <ul class="qual-list">
+            <li>Vous publiez déjà — ou devriez publier — régulièrement, mais n'avez plus le temps.</li>
+            <li>Vous préférez un système vérifiable à une promesse vague.</li>
+            <li>Vous êtes prêt à valider une direction éditoriale une fois, plutôt que chaque post individuellement.</li>
+          </ul>
         </div>
       </div>
     </section>
@@ -223,10 +311,21 @@
     </section>
   </div>
 
+  <div class="wrap">
+    <section>
+      <div class="eyebrow">Preuve</div>
+      <h2 class="section-title">Pas de faux témoignages</h2>
+      <div class="proof-box">
+        <p>Nouvelle activité : nous n'avons pas encore de clients à citer, et nous ne fabriquerons pas de faux avis pour faire comme si.</p>
+        <p><strong>La vraie preuve, c'est le système qui tourne en direct</strong> sur les comptes La Boîte de Pandore — allez le constater vous-même plutôt que de nous croire sur parole. Chaque vidéo publiée passe par les mêmes 5 couches de contrôle décrites plus haut.</p>
+      </div>
+    </section>
+  </div>
+
   <div class="wrap" id="tarifs">
     <section>
       <div class="eyebrow">Tarifs</div>
-      <h2 class="section-title">Trois formules</h2>
+      <h2 class="section-title">Voici ce que vous payez. Voici ce que vous obtenez.</h2>
       <div class="draft-badge">Structure indicative — tarifs définitifs communiqués lors de l'audit</div>
       <div class="pricing-grid">
         <div class="price-card">
@@ -247,6 +346,7 @@
             <li>Contrôle qualité automatisé configuré</li>
             <li>Formation à l'utilisation du système</li>
           </ul>
+          <div class="promo-tag" id="promoTagPrice">Remise de lancement pendant la fenêtre active — % indicatif, confirmé à l'audit</div>
         </div>
         <div class="price-card">
           <div class="price-top"><div class="price-name">Accompagnement</div><div class="price-value">Mensuel</div></div>
@@ -273,6 +373,14 @@
         <div class="faq-item">
           <div class="faq-q">Est-ce que ça remplace complètement une personne ?</div>
           <div class="faq-a">Non — le modèle qui fonctionne le mieux garde une direction humaine ponctuelle (mensuelle ou trimestrielle) pendant que le système gère la production quotidienne.</div>
+        </div>
+        <div class="faq-item">
+          <div class="faq-q">Je n'y connais rien en IA, c'est un problème ?</div>
+          <div class="faq-a">Non — vous validez une direction éditoriale une fois, le système gère la partie technique. Si vous savez décrire ce que vous voulez dire, vous avez le niveau.</div>
+        </div>
+        <div class="faq-item">
+          <div class="faq-q">Et si je rate la fenêtre de lancement ?</div>
+          <div class="faq-a">Elle revient tous les 14 jours, pendant 3 jours à chaque fois — pas de pénalité, juste un rappel que la remise n'est pas permanente.</div>
         </div>
         <div class="faq-item">
           <div class="faq-q">Combien de temps pour la mise en place ?</div>
@@ -303,5 +411,68 @@
   </footer>
 
 </main>
+
+<script>
+(function () {
+  // Cycle réel : 14 jours, fenêtre de promo active pendant les 3 premiers jours de
+  // chaque cycle. Epoch fixe dans le passé pour que le calcul reste correct quelle
+  // que soit la date de visite (pas de fausse urgence : le cycle tourne vraiment).
+  var CYCLE_DAYS = 14;
+  var PROMO_DAYS = 3;
+  var MS_PER_DAY = 86400000;
+  var EPOCH = new Date('2026-01-05T00:00:00');
+
+  function getState(now) {
+    var daysSinceEpoch = Math.floor((now - EPOCH) / MS_PER_DAY);
+    var dayInCycle = ((daysSinceEpoch % CYCLE_DAYS) + CYCLE_DAYS) % CYCLE_DAYS;
+    var cycleStartDay = daysSinceEpoch - dayInCycle;
+    if (dayInCycle < PROMO_DAYS) {
+      var promoEnd = new Date(EPOCH.getTime() + (cycleStartDay + PROMO_DAYS) * MS_PER_DAY);
+      return { active: true, msRemaining: promoEnd - now };
+    }
+    var nextStart = new Date(EPOCH.getTime() + (cycleStartDay + CYCLE_DAYS) * MS_PER_DAY);
+    return { active: false, msRemaining: nextStart - now };
+  }
+
+  function formatMs(ms) {
+    var totalSec = Math.max(0, Math.floor(ms / 1000));
+    var d = Math.floor(totalSec / 86400);
+    var h = Math.floor((totalSec % 86400) / 3600);
+    var m = Math.floor((totalSec % 3600) / 60);
+    var s = totalSec % 60;
+    var pad = function (n) { return String(n).padStart(2, '0'); };
+    if (d > 0) return d + 'j ' + pad(h) + 'h ' + pad(m) + 'm';
+    return pad(h) + 'h ' + pad(m) + 'm ' + pad(s) + 's';
+  }
+
+  var bar = document.getElementById('promoBar');
+  var labelEl = document.getElementById('promoLabel');
+  var timeLabelEl = document.getElementById('promoTimeLabel');
+  var timeEl = document.getElementById('promoTime');
+  var noteEl = document.getElementById('promoNote');
+  var priceTag = document.getElementById('promoTagPrice');
+
+  function tick() {
+    var state = getState(new Date());
+    timeEl.textContent = formatMs(state.msRemaining);
+    if (state.active) {
+      bar.classList.remove('inactive');
+      labelEl.textContent = 'Fenêtre de lancement active';
+      timeLabelEl.textContent = 'se termine dans';
+      noteEl.textContent = 'Cette fenêtre revient tous les 14 jours, pendant 3 jours.';
+      if (priceTag) priceTag.style.display = 'inline-block';
+    } else {
+      bar.classList.add('inactive');
+      labelEl.textContent = 'Prochaine fenêtre de lancement';
+      timeLabelEl.textContent = 'dans';
+      noteEl.textContent = 'Hors fenêtre : tarifs standards. La remise revient tous les 14 jours.';
+      if (priceTag) priceTag.style.display = 'none';
+    }
+  }
+
+  tick();
+  setInterval(tick, 1000);
+})();
+</script>
 </body>
 </html>
