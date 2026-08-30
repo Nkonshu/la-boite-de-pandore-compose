@@ -195,7 +195,7 @@
       <div class="promo-dot"></div>
       <div class="promo-text"><span id="promoLabel">Fenêtre de lancement active</span> — <span id="promoTimeLabel">se termine dans</span> <span class="promo-time" id="promoTime">--</span></div>
     </div>
-    <div class="promo-note" id="promoNote">Audits traités en priorité durant cette fenêtre. Elle revient tous les 14 jours, pendant 3 jours.</div>
+    <div class="promo-note" id="promoNote">Audits traités en priorité durant cette fenêtre.</div>
   </div>
 
   <div class="wrap">
@@ -362,10 +362,6 @@
           <div class="faq-a">Non — vous validez une direction éditoriale une fois, le système gère la partie technique. Si vous savez décrire ce que vous voulez dire, vous avez le niveau.</div>
         </div>
         <div class="faq-item">
-          <div class="faq-q">Et si je rate la fenêtre de lancement ?</div>
-          <div class="faq-a">Elle revient tous les 14 jours, pendant 3 jours à chaque fois — pas de pénalité, juste une priorité de traitement pendant ces fenêtres-là.</div>
-        </div>
-        <div class="faq-item">
           <div class="faq-q">Combien de temps pour la mise en place ?</div>
           <div class="faq-a">Variable selon la complexité de vos besoins — discuté précisément lors de l'audit gratuit.</div>
         </div>
@@ -441,12 +437,12 @@
       bar.classList.remove('inactive');
       labelEl.textContent = 'Fenêtre de lancement active';
       timeLabelEl.textContent = 'se termine dans';
-      noteEl.textContent = 'Audits traités en priorité durant cette fenêtre. Elle revient tous les 14 jours, pendant 3 jours.';
+      noteEl.textContent = 'Audits traités en priorité durant cette fenêtre.';
     } else {
       bar.classList.add('inactive');
       labelEl.textContent = 'Prochaine fenêtre de lancement';
       timeLabelEl.textContent = 'dans';
-      noteEl.textContent = 'Hors fenêtre, les audits restent ouverts — la priorité revient tous les 14 jours.';
+      noteEl.textContent = 'Hors fenêtre, les audits restent ouverts.';
     }
   }
 
