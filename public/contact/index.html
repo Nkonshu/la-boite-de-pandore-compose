@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Contact — La Boîte de Pandore</title>
+<meta name="description" content="Écrivez-nous : nous revenons vers vous sous 48h.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0B0D10;
+    --surface: #14171C;
+    --surface-raised: #1C2027;
+    --accent: #E8A33D;
+    --accent-deep: #B87B22;
+    --good: #3DBD8C;
+    --bad: #E2685A;
+    --text: #F3F1EC;
+    --mute: #8B909A;
+    --mute-dim: #5B616B;
+    --border: #262B33;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'IBM Plex Sans', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+  }
+  h1 { font-family: 'Instrument Sans', 'IBM Plex Sans', sans-serif; margin: 0 0 10px; font-size: 30px; font-weight: 700; letter-spacing: -0.02em; text-wrap: balance; }
+  a { color: var(--accent); }
+
+  .wrap { max-width: 520px; margin: 0 auto; padding: 48px 24px; width: 100%; }
+  .eyebrow { font-size: 12px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); margin-bottom: 14px; }
+  .sub { font-size: 15px; color: var(--mute); line-height: 1.6; margin-bottom: 32px; max-width: 44ch; }
+
+  form { display: grid; gap: 18px; }
+  label { display: block; font-size: 13px; font-weight: 600; color: var(--mute); margin-bottom: 7px; }
+  input, textarea {
+    width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 13px 14px; color: var(--text); font-family: inherit; font-size: 15px;
+  }
+  input:focus, textarea:focus { outline: none; border-color: var(--accent); }
+  textarea { resize: vertical; min-height: 120px; }
+
+  .cta {
+    display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+    background: var(--accent); color: #201404; font-weight: 700; font-size: 15px;
+    padding: 15px 28px; border-radius: 999px; border: none; cursor: pointer;
+    box-shadow: 0 14px 30px -14px rgba(232,163,61,0.6);
+    margin-top: 6px;
+  }
+  .cta:disabled { opacity: 0.6; cursor: not-allowed; }
+
+  .msg { font-size: 14px; margin-top: 16px; display: none; }
+  .msg.show { display: block; }
+  .msg.ok { color: var(--good); }
+  .msg.err { color: var(--bad); }
+
+  .back { display: inline-block; margin-top: 28px; font-size: 13px; color: var(--mute-dim); text-decoration: none; }
+  .back:hover { color: var(--mute); }
+
+  .success { display: none; }
+  .success.show { display: block; }
+  .success h1 { color: var(--good); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div id="formView">
+    <div class="eyebrow">La Boîte de Pandore</div>
+    <h1>Parlons de votre présence en ligne</h1>
+    <p class="sub">Décrivez votre situation en quelques mots — nous revenons vers vous sous 48h.</p>
+
+    <form id="contactForm">
+      <div>
+        <label for="name">Votre nom</label>
+        <input type="text" id="name" name="name" required autocomplete="name">
+      </div>
+      <div>
+        <label for="email">Votre email</label>
+        <input type="email" id="email" name="email" required autocomplete="email">
+      </div>
+      <div>
+        <label for="message">Votre message</label>
+        <textarea id="message" name="message" required placeholder="Votre activité, où vous en êtes sur les réseaux, ce que vous cherchez..."></textarea>
+      </div>
+      <button class="cta" type="submit" id="submitBtn">Envoyer</button>
+      <div class="msg" id="msg"></div>
+    </form>
+  </div>
+
+  <div class="success" id="successView">
+    <div class="eyebrow">Message envoyé</div>
+    <h1>Merci !</h1>
+    <p class="sub">Votre message est bien arrivé. Nous revenons vers vous sous 48h.</p>
+  </div>
+
+  <a class="back" href="/">← Retour à l'accueil</a>
+</div>
+
+<script>
+document.getElementById('contactForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('submitBtn');
+  const msg = document.getElementById('msg');
+  msg.classList.remove('show', 'ok', 'err');
+  btn.disabled = true;
+  btn.textContent = 'Envoi en cours...';
+
+  const payload = {
+    name: document.getElementById('name').value.trim(),
+    email: document.getElementById('email').value.trim(),
+    message: document.getElementById('message').value.trim(),
+  };
+
+  try {
+    const res = await fetch('/api/contact', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error('send_failed');
+    document.getElementById('formView').style.display = 'none';
+    document.getElementById('successView').classList.add('show');
+  } catch (err) {
+    msg.textContent = "L'envoi a échoué — réessayez dans un instant, ou écrivez-nous directement.";
+    msg.classList.add('show', 'err');
+    btn.disabled = false;
+    btn.textContent = 'Envoyer';
+  }
+});
+</script>
+</body>
+</html>

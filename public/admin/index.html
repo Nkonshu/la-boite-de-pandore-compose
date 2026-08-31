@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Admin — La Boîte de Pandore</title>
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0B0D10;
+    --surface: #14171C;
+    --surface-raised: #1C2027;
+    --accent: #E8A33D;
+    --good: #3DBD8C;
+    --bad: #E2685A;
+    --text: #F3F1EC;
+    --mute: #8B909A;
+    --mute-dim: #5B616B;
+    --border: #262B33;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'IBM Plex Sans', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1, h2, h3 { font-family: 'Instrument Sans', 'IBM Plex Sans', sans-serif; margin: 0; }
+  a { color: var(--accent); }
+  .num { font-variant-numeric: tabular-nums; }
+
+  /* ---------- login gate ---------- */
+  .gate { min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+  .gate-box { width: 100%; max-width: 360px; padding: 24px; }
+  .gate-box h1 { font-size: 22px; margin-bottom: 20px; }
+  .gate-box input {
+    width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 13px 14px; color: var(--text); font-family: inherit; font-size: 15px; margin-bottom: 14px;
+  }
+  .gate-box input:focus { outline: none; border-color: var(--accent); }
+  .gate-box .err { color: var(--bad); font-size: 13px; margin-bottom: 12px; display: none; }
+  .gate-box .err.show { display: block; }
+
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    background: var(--accent); color: #201404; font-weight: 700; font-size: 14px;
+    padding: 11px 22px; border-radius: 999px; border: none; cursor: pointer;
+  }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--text); font-weight: 600; }
+  .btn-sm { padding: 6px 14px; font-size: 12.5px; }
+
+  /* ---------- dashboard ---------- */
+  #dashboard { display: none; }
+  #dashboard.show { display: block; }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 40px 24px 90px; }
+  .topbar { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 32px; flex-wrap: wrap; gap: 12px; }
+  .topbar h1 { font-size: 24px; font-weight: 700; }
+  .topbar .sub { font-size: 13px; color: var(--mute-dim); }
+
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px,1fr)); gap: 14px; margin-bottom: 40px; }
+  .stat { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; }
+  .stat .n { font-size: 26px; font-weight: 700; font-family: 'Instrument Sans'; }
+  .stat .l { font-size: 12px; color: var(--mute); margin-top: 2px; }
+
+  .panel { margin-bottom: 44px; }
+  .panel h2 {
+    font-family: 'IBM Plex Mono', monospace; font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--accent); margin-bottom: 14px;
+  }
+  table { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  .table-scroll { overflow-x: auto; border-radius: 12px; }
+  th, td { text-align: left; padding: 12px 14px; font-size: 13.5px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--mute-dim); font-weight: 600; }
+  tr:last-child td { border-bottom: none; }
+  td.msg { max-width: 320px; color: var(--mute); }
+  td.email { color: var(--mute); white-space: nowrap; }
+  td.date { color: var(--mute-dim); white-space: nowrap; font-family: 'IBM Plex Mono', monospace; font-size: 12px; }
+
+  .pill { display: inline-block; font-family: 'IBM Plex Mono', monospace; font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 999px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .pill.nouveau { background: rgba(232,163,61,0.14); color: var(--accent); }
+  .pill.traite { background: rgba(61,189,140,0.14); color: var(--good); }
+
+  .empty-row td { text-align: center; color: var(--mute-dim); padding: 28px; }
+</style>
+</head>
+<body>
+
+<div class="gate" id="gate">
+  <div class="gate-box">
+    <h1>Administration — La Boîte de Pandore</h1>
+    <input type="password" id="pwInput" placeholder="Mot de passe" autocomplete="current-password">
+    <div class="err" id="gateErr">Mot de passe incorrect.</div>
+    <button class="btn" id="loginBtn" style="width:100%">Se connecter</button>
+  </div>
+</div>
+
+<div id="dashboard">
+  <div class="wrap">
+    <div class="topbar">
+      <div>
+        <h1>Contacts &amp; Audits</h1>
+        <div class="sub">La Boîte de Pandore</div>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="refreshAll()">Rafraîchir</button>
+    </div>
+
+    <div class="stats" id="stats"></div>
+
+    <div class="panel">
+      <h2>Messages de contact</h2>
+      <div class="table-scroll">
+        <table id="contactsTable">
+          <thead><tr><th>Date</th><th>Nom</th><th>Email</th><th>Message</th><th>Statut</th><th></th></tr></thead>
+          <tbody><tr class="empty-row"><td colspan="6">Chargement...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Audits reçus</h2>
+      <div class="table-scroll">
+        <table id="auditsTable">
+          <thead><tr><th>Date</th><th>Nom</th><th>Email</th><th>Statut</th><th></th><th></th></tr></thead>
+          <tbody><tr class="empty-row"><td colspan="6">Chargement...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const PW_KEY = 'pandore_admin_pw';
+
+function esc(s){
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function fmtDate(iso){
+  if(!iso) return '';
+  return new Date(iso).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' });
+}
+
+async function api(path, opts = {}){
+  const pw = localStorage.getItem(PW_KEY) || '';
+  const res = await fetch(path, {
+    ...opts,
+    headers: { ...(opts.headers || {}), 'x-admin-password': pw },
+  });
+  if(res.status === 401){
+    localStorage.removeItem(PW_KEY);
+    showGate(true);
+    throw new Error('unauthorized');
+  }
+  return res.json();
+}
+
+function showGate(withError){
+  document.getElementById('gate').style.display = 'flex';
+  document.getElementById('dashboard').classList.remove('show');
+  document.getElementById('gateErr').classList.toggle('show', !!withError);
+}
+
+function showDashboard(){
+  document.getElementById('gate').style.display = 'none';
+  document.getElementById('dashboard').classList.add('show');
+  refreshAll();
+}
+
+document.getElementById('loginBtn').addEventListener('click', tryLogin);
+document.getElementById('pwInput').addEventListener('keydown', (e) => { if(e.key === 'Enter') tryLogin(); });
+
+async function tryLogin(){
+  const pw = document.getElementById('pwInput').value;
+  localStorage.setItem(PW_KEY, pw);
+  try{
+    await api('/api/admin/contacts');
+    showDashboard();
+  }catch(err){
+    showGate(true);
+  }
+}
+
+let contactsCache = [];
+let auditsCache = [];
+
+async function refreshAll(){
+  try{
+    const [contacts, audits] = await Promise.all([
+      api('/api/admin/contacts'),
+      api('/api/admin/audits'),
+    ]);
+    contactsCache = Array.isArray(contacts) ? contacts : [];
+    auditsCache = Array.isArray(audits) ? audits : [];
+    renderStats();
+    renderContacts();
+    renderAudits();
+  }catch(err){
+    // 401 already handled inside api(); other errors: leave tables as-is
+  }
+}
+
+function renderStats(){
+  const newContacts = contactsCache.filter(c => c.status !== 'traite').length;
+  const newAudits = auditsCache.filter(a => a.status !== 'traite').length;
+  document.getElementById('stats').innerHTML = `
+    <div class="stat"><div class="n num">${contactsCache.length}</div><div class="l">Contacts total</div></div>
+    <div class="stat"><div class="n num">${newContacts}</div><div class="l">Contacts nouveaux</div></div>
+    <div class="stat"><div class="n num">${auditsCache.length}</div><div class="l">Audits total</div></div>
+    <div class="stat"><div class="n num">${newAudits}</div><div class="l">Audits nouveaux</div></div>
+  `;
+}
+
+function renderContacts(){
+  const tbody = document.querySelector('#contactsTable tbody');
+  if(contactsCache.length === 0){
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="6">Aucun contact pour le moment.</td></tr>';
+    return;
+  }
+  const sorted = [...contactsCache].sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
+  tbody.innerHTML = sorted.map(c => `
+    <tr>
+      <td class="date">${fmtDate(c.createdAt)}</td>
+      <td>${esc(c.name || '')}</td>
+      <td class="email">${esc(c.email || '')}</td>
+      <td class="msg">${esc(c.message || '')}</td>
+      <td><span class="pill ${c.status === 'traite' ? 'traite' : 'nouveau'}">${c.status === 'traite' ? 'traité' : 'nouveau'}</span></td>
+      <td>${c.status === 'traite'
+        ? ''
+        : `<button class="btn btn-ghost btn-sm" onclick="markContact(${c.id})">Marquer traité</button>`}</td>
+    </tr>
+  `).join('');
+}
+
+function renderAudits(){
+  const tbody = document.querySelector('#auditsTable tbody');
+  if(auditsCache.length === 0){
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="6">Aucun audit reçu pour le moment.</td></tr>';
+    return;
+  }
+  const sorted = [...auditsCache].sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
+  tbody.innerHTML = sorted.map(a => `
+    <tr>
+      <td class="date">${fmtDate(a.createdAt)}</td>
+      <td>${esc(a.name || '')}</td>
+      <td class="email">${esc(a.email || '')}</td>
+      <td><span class="pill ${a.status === 'traite' ? 'traite' : 'nouveau'}">${a.status === 'traite' ? 'traité' : 'nouveau'}</span></td>
+      <td><a href="/audit/result?id=${encodeURIComponent(a.audit_id)}" target="_blank">Voir les réponses →</a></td>
+      <td>${a.status === 'traite'
+        ? ''
+        : `<button class="btn btn-ghost btn-sm" onclick="markAudit(${a.id})">Marquer traité</button>`}</td>
+    </tr>
+  `).join('');
+}
+
+async function markContact(id){
+  await api('/api/admin/status', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ table: 'contacts', id, status: 'traite' }),
+  });
+  refreshAll();
+}
+
+async function markAudit(id){
+  await api('/api/admin/status', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ table: 'audits', id, status: 'traite' }),
+  });
+  refreshAll();
+}
+
+(async function init(){
+  if(localStorage.getItem(PW_KEY)){
+    try{
+      await api('/api/admin/contacts');
+      showDashboard();
+    }catch(err){
+      showGate(false);
+    }
+  } else {
+    showGate(false);
+  }
+})();
+</script>
+</body>
+</html>

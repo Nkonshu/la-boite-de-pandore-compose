@@ -150,6 +150,118 @@ app.post('/compose', async (req, res) => {
   }
 });
 
+const N8N_BASE = process.env.N8N_BASE || 'https://n8n.le-shabba.fr';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+const INTERNAL_SECRET = process.env.PANDORE_INTERNAL_SECRET;
+
+async function n8nWebhook(pathAndQuery, opts = {}) {
+  const res = await fetch(`${N8N_BASE}/webhook/${pathAndQuery}`, opts);
+  const text = await res.text();
+  let data;
+  try { data = JSON.parse(text); } catch { data = { raw: text }; }
+  return { status: res.status, data };
+}
+
+function checkAdmin(req, res) {
+  const pw = req.get('x-admin-password');
+  if (!ADMIN_PASSWORD || pw !== ADMIN_PASSWORD) {
+    res.status(401).json({ error: 'Non autorisé' });
+    return false;
+  }
+  return true;
+}
+
+app.post('/api/contact', async (req, res) => {
+  const { name, email, message } = req.body || {};
+  if (!name || !email || !message) return res.status(400).json({ error: 'name, email et message sont requis' });
+  try {
+    const { status, data } = await n8nWebhook('pandore-contact', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, email, message }),
+    });
+    res.status(status).json(data);
+  } catch (err) {
+    console.error(err);
+    res.status(502).json({ error: 'Envoi impossible pour le moment' });
+  }
+});
+
+app.post('/api/audit', async (req, res) => {
+  const { name, email, answers, synthesis } = req.body || {};
+  if (!name || !email || !answers) return res.status(400).json({ error: 'name, email et answers sont requis' });
+  try {
+    const { status, data } = await n8nWebhook('pandore-audit-submit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, email, answers, synthesis }),
+    });
+    res.status(status).json(data);
+  } catch (err) {
+    console.error(err);
+    res.status(502).json({ error: 'Envoi impossible pour le moment' });
+  }
+});
+
+app.get('/api/audit/:id', async (req, res) => {
+  try {
+    const { status, data } = await n8nWebhook(`pandore-audit-result?id=${encodeURIComponent(req.params.id)}`, { method: 'GET' });
+    res.status(status).json(data);
+  } catch (err) {
+    console.error(err);
+    res.status(502).json({ error: 'Lecture impossible pour le moment' });
+  }
+});
+
+app.get('/api/admin/contacts', async (req, res) => {
+  if (!checkAdmin(req, res)) return;
+  try {
+    const { status, data } = await n8nWebhook('pandore-admin-contacts', {
+      method: 'GET',
+      headers: { 'x-internal-secret': INTERNAL_SECRET },
+    });
+    res.status(status).json(data);
+  } catch (err) {
+    console.error(err);
+    res.status(502).json({ error: 'Lecture impossible' });
+  }
+});
+
+app.get('/api/admin/audits', async (req, res) => {
+  if (!checkAdmin(req, res)) return;
+  try {
+    const { status, data } = await n8nWebhook('pandore-admin-audits', {
+      method: 'GET',
+      headers: { 'x-internal-secret': INTERNAL_SECRET },
+    });
+    res.status(status).json(data);
+  } catch (err) {
+    console.error(err);
+    res.status(502).json({ error: 'Lecture impossible' });
+  }
+});
+
+app.post('/api/admin/status', async (req, res) => {
+  if (!checkAdmin(req, res)) return;
+  const { table, id, status: newStatus } = req.body || {};
+  if (!table || !id || !newStatus) return res.status(400).json({ error: 'table, id, status requis' });
+  const webhookPath = table === 'contacts' ? 'pandore-admin-status-contact'
+    : table === 'audits' ? 'pandore-admin-status-audit'
+    : null;
+  if (!webhookPath) return res.status(400).json({ error: 'table invalide' });
+  try {
+    const { status, data } = await n8nWebhook(webhookPath, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-internal-secret': INTERNAL_SECRET },
+      body: JSON.stringify({ id, status: newStatus }),
+    });
+    res.status(status).json(data);
+  } catch (err) {
+    console.error(err);
+    res.status(502).json({ error: 'Mise à jour impossible' });
+  }
+});
+
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
 const PORT = process.env.PORT || 3400;

@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Réponses d'audit — La Boîte de Pandore</title>
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0B0D10;
+    --surface: #14171C;
+    --surface-raised: #1C2027;
+    --accent: #E8A33D;
+    --good: #3DBD8C;
+    --bad: #E2685A;
+    --text: #F3F1EC;
+    --mute: #8B909A;
+    --mute-dim: #5B616B;
+    --border: #262B33;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'IBM Plex Sans', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1, h2, h3 { font-family: 'Instrument Sans', 'IBM Plex Sans', sans-serif; margin: 0; }
+  a { color: var(--accent); }
+
+  .wrap { max-width: 680px; margin: 0 auto; padding: 56px 24px 90px; }
+  .eyebrow { font-size: 12px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); margin-bottom: 14px; }
+  h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 6px; }
+  .meta { font-size: 14px; color: var(--mute); margin-bottom: 36px; }
+  .meta b { color: var(--text); }
+
+  .status-pill {
+    display: inline-block; font-family: 'IBM Plex Mono', monospace; font-size: 11px; font-weight: 600;
+    padding: 4px 10px; border-radius: 999px; background: rgba(61,189,140,0.14); color: var(--good);
+    text-transform: uppercase; letter-spacing: 0.05em; margin-left: 10px; vertical-align: middle;
+  }
+
+  .section { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 22px 24px; margin-bottom: 16px; }
+  .section h3 {
+    font-family: 'IBM Plex Mono', monospace; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--accent); margin-bottom: 14px; border-bottom: 1px solid var(--border); padding-bottom: 10px;
+  }
+  .item { padding: 10px 0; font-size: 14.5px; }
+  .item + .item { border-top: 1px dashed var(--border); }
+  .item .q { color: var(--mute); margin-bottom: 3px; }
+  .item .a { color: var(--text); line-height: 1.5; }
+  .item .a.empty { color: var(--mute-dim); font-style: italic; }
+
+  .state { text-align: center; padding: 100px 24px; color: var(--mute); }
+  .state.error { color: var(--bad); }
+
+  .raw { white-space: pre-wrap; font-family: 'IBM Plex Mono', monospace; font-size: 13px; line-height: 1.6; color: var(--text); }
+</style>
+</head>
+<body>
+<div class="wrap" id="app">
+  <div class="state" id="loading">Chargement...</div>
+</div>
+
+<script>
+function esc(s){
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// Convertit le texte de synthèse ("## Section" / "- question → réponse") en HTML structuré.
+function renderSynthesis(text){
+  const lines = text.split('\n');
+  let html = '';
+  let inSection = false;
+  for(const line of lines){
+    if(line.startsWith('## ')){
+      if(inSection) html += '</div>';
+      html += `<div class="section"><h3>${esc(line.slice(3))}</h3>`;
+      inSection = true;
+    } else if(line.startsWith('- ')){
+      const idx = line.indexOf(' → ');
+      if(idx !== -1){
+        const q = line.slice(2, idx);
+        const a = line.slice(idx + 3);
+        const empty = a === '(non renseigné)';
+        html += `<div class="item"><div class="q">${esc(q)}</div><div class="a ${empty ? 'empty' : ''}">${esc(a)}</div></div>`;
+      }
+    }
+  }
+  if(inSection) html += '</div>';
+  return html;
+}
+
+async function load(){
+  const app = document.getElementById('app');
+  const params = new URLSearchParams(location.search);
+  const id = params.get('id');
+  if(!id){
+    app.innerHTML = '<div class="state error">Aucun identifiant d\'audit dans le lien.</div>';
+    return;
+  }
+  try{
+    const res = await fetch(`/api/audit/${encodeURIComponent(id)}`);
+    if(res.status === 404){
+      app.innerHTML = '<div class="state error">Cet audit est introuvable — le lien est peut-être incorrect ou expiré.</div>';
+      return;
+    }
+    if(!res.ok) throw new Error('load_failed');
+    const data = await res.json();
+
+    const date = data.createdAt ? new Date(data.createdAt).toLocaleString('fr-FR', { dateStyle: 'long', timeStyle: 'short' }) : '';
+    const body = data.synthesis
+      ? renderSynthesis(data.synthesis)
+      : `<div class="section"><h3>Réponses brutes</h3><div class="raw">${esc(JSON.stringify(JSON.parse(data.answers_json || '{}'), null, 2))}</div></div>`;
+
+    app.innerHTML = `
+      <div class="eyebrow">Audit de besoin</div>
+      <h1>${esc(data.name || 'Prospect')}<span class="status-pill">${esc(data.status || 'nouveau')}</span></h1>
+      <div class="meta"><b>${esc(data.email || '')}</b> — reçu le ${esc(date)}</div>
+      ${body}
+    `;
+  }catch(err){
+    app.innerHTML = '<div class="state error">Erreur de chargement — réessayez dans un instant.</div>';
+  }
+}
+load();
+</script>
+</body>
+</html>

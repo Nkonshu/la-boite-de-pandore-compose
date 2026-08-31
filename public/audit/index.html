@@ -211,21 +211,24 @@
   <div class="step" id="review">
     <div class="eyebrow"><span class="done-badge">Terminé</span></div>
     <h2>Votre synthèse</h2>
-    <p style="color:var(--ink-soft); font-size:14.5px; margin-top:-14px; margin-bottom:28px; max-width:60ch;">Voici un récapitulatif de vos réponses. Vérifiez-le, puis envoyez-le-nous avec l'une des options ci-dessous.</p>
+    <p style="color:var(--ink-soft); font-size:14.5px; margin-top:-14px; margin-bottom:28px; max-width:60ch;">Voici un récapitulatif de vos réponses. Vérifiez-le, puis envoyez-le-nous.</p>
     <div id="reviewBody"></div>
 
-    <div class="send-panel">
+    <div class="send-panel" id="sendPanel">
       <h3>Envoyer votre audit</h3>
-      <p>Trois façons d'envoyer vos réponses — utilisez celle qui vous convient le mieux.</p>
+      <p>Vos réponses nous seront transmises directement — nous revenons vers vous sous 48h.</p>
       <div class="send-actions">
-        <a class="btn btn-primary" id="mailtoBtn" href="#">Envoyer par email</a>
-        <button class="btn btn-ghost" id="copyBtn" onclick="copySynthesis()">Copier le texte</button>
-        <button class="btn btn-ghost" id="downloadBtn" onclick="downloadSynthesis()" hidden>Télécharger (.txt)</button>
+        <button class="btn btn-primary" id="submitBtn" onclick="submitAudit()">Envoyer mon audit</button>
       </div>
       <div class="status-msg" id="statusMsg"></div>
     </div>
 
-    <div class="nav-row">
+    <div class="send-panel" id="sentPanel" hidden>
+      <h3>Merci !</h3>
+      <p>Votre audit a bien été envoyé à La Boîte de Pandore. Nous revenons vers vous sous 48h.</p>
+    </div>
+
+    <div class="nav-row" id="reviewNav">
       <button class="btn btn-ghost" onclick="goToStep(TOTAL_STEPS-1)">← Revoir mes réponses</button>
     </div>
   </div>
@@ -234,8 +237,6 @@
 </div>
 
 <script>
-const CONTACT_EMAIL = "3ilnjeuleu@gmail.com";
-
 // ---------- pays → devise ----------
 const CURRENCIES = {
   EUR:{ symbol:"€", pos:"after", low:200, mid:500, high:1500 },
@@ -634,44 +635,37 @@ function finishAudit(){
     return `<div class="rev-section"><h3>${sec.title}</h3>${items}</div>`;
   }).join("");
 
-  const synth = buildSynthesisText();
-  const subject = `Audit de besoin — ${state.a0 || "Prospect"}`;
-  const mailto = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(synth)}`;
-  document.getElementById("mailtoBtn").href = mailto;
-
   document.getElementById("review").classList.add("active");
   window.scrollTo({top:0});
 }
 
-function copySynthesis(){
-  const text = buildSynthesisText();
+async function submitAudit(){
+  const btn = document.getElementById("submitBtn");
   const status = document.getElementById("statusMsg");
-  navigator.clipboard.writeText(text).then(()=>{
-    status.textContent = "Synthèse copiée — collez-la dans un email ou un message.";
-    status.classList.add("show");
-  }).catch(()=>{
-    status.textContent = "La copie automatique n'a pas fonctionné sur ce navigateur — utilisez le téléchargement ou l'email.";
-    status.classList.add("show");
-  });
-}
+  status.classList.remove("show");
+  btn.disabled = true;
+  btn.textContent = "Envoi en cours...";
 
-function downloadSynthesis(){
-  const text = buildSynthesisText();
-  const name = (state.a0 || "audit").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/(^-|-$)/g,"") || "audit";
-  const blob = new Blob([text], {type:"text/plain;charset=utf-8"});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `audit-besoin-${name}.txt`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-  const status = document.getElementById("statusMsg");
-  status.textContent = "Fichier téléchargé.";
-  status.classList.add("show");
+  try{
+    const res = await fetch("/api/audit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: state.a0 || "",
+        email: state.a0b || "",
+        answers: state,
+        synthesis: buildSynthesisText(),
+      }),
+    });
+    if(!res.ok) throw new Error("send_failed");
+    document.getElementById("sendPanel").hidden = true;
+    document.getElementById("sentPanel").hidden = false;
+    document.getElementById("reviewNav").hidden = true;
+  }catch(err){
+    status.textContent = "L'envoi a échoué — réessayez dans un instant.";
+    status.classList.add("show");
+    btn.disabled = false;
+    btn.textContent = "Envoyer mon audit";
+  }
 }
-document.addEventListener("DOMContentLoaded", () => {
-  document.getElementById("downloadBtn").hidden = false;
-});
 </script>
