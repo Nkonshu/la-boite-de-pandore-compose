@@ -211,7 +211,7 @@
     </div>
     <div class="eyebrow">Audit de faisabilité</div>
     <h1>Avant de construire votre système, on cadre votre besoin.</h1>
-    <p class="lead">33 questions, réparties en 8 courtes étapes (environ 6 minutes). Vos réponses servent à configurer précisément votre pipeline de contenu — ligne éditoriale, ton, fréquence, niveau de validation — avant tout démarrage.</p>
+    <p class="lead">37 questions, réparties en 8 courtes étapes (environ 7 minutes). Vos réponses servent à configurer précisément votre pipeline de contenu — ligne éditoriale, ton, fréquence, niveau de validation — avant tout démarrage.</p>
     <ul class="promise">
       <li>Répondez à votre rythme, en cochant les propositions qui vous ressemblent le plus.</li>
       <li>Aucune bonne ou mauvaise réponse : plus c'est précis, mieux le système sera calibré.</li>
@@ -374,7 +374,16 @@ const SECTIONS = [
       {id:"b5", type:"multi", label:"Sur quelles plateformes êtes-vous déjà présent(e) ?", help:"Plusieurs réponses possibles.", required:true, options:[
         {v:"instagram", l:"Instagram"}, {v:"tiktok", l:"TikTok"}, {v:"youtube", l:"YouTube"},
         {v:"facebook", l:"Facebook"}, {v:"linkedin", l:"LinkedIn"}, {v:"aucune", l:"Aucune"}
-      ]}
+      ]},
+      {id:"b6", type:"text", area:true, label:"Comment un client ou utilisateur accède-t-il concrètement à votre produit ou service ?", help:"Lien direct, store officiel, boutique physique, sur rendez-vous, lien de test...", required:true, placeholder:"Ex : lien de téléchargement direct (pas encore sur le Play Store), sur rendez-vous au cabinet, commande sur le site..."},
+      {id:"b7", type:"single", label:"Votre produit ou service est-il déjà accessible au grand public ?", required:true, options:[
+        {v:"public", l:"Oui, disponible publiquement"}, {v:"beta", l:"En test / bêta fermée"}, {v:"prelaunch", l:"Pas encore lancé"}
+      ]},
+      {id:"b8", type:"single", label:"Avez-vous déjà un outil de mesure en place (Google Analytics, Meta Pixel, Firebase Analytics...) ?", required:true, options:[
+        {v:"oui_acces", l:"Oui, et je peux vous y donner accès"}, {v:"oui_pas_acces", l:"Oui, mais je ne sais pas comment y donner accès"},
+        {v:"non", l:"Non, aucun"}, {v:"sais_pas", l:"Je ne sais pas"}
+      ]},
+      {id:"b9", type:"text", area:true, label:"Quelle action précise, si elle se produit, représente pour vous un vrai succès ?", help:"Un appel, une réservation, un téléchargement, une inscription, un achat...", required:true, placeholder:"Ex : une partie terminée dans l'app, une demande de devis, une réservation de table..."}
     ]
   },
   {
