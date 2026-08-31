@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>La Boîte de Pandore — Automatisation réseaux sociaux</title>
 <meta name="description" content="Remplacez un community manager à temps plein par un système IA qui trouve les idées, écrit, produit et publie — sous contrôle qualité automatisé.">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -54,10 +55,8 @@
 
   /* Hero */
   .hero { padding: 96px 0 44px; text-align: center; }
-  .mark { width: 60px; height: 60px; margin: 0 auto 32px; position: relative; }
-  .mark-ring { position: absolute; inset: 0; border-radius: 999px; border: 2px solid var(--accent); }
-  .mark-ring::after { content:''; position:absolute; inset: -6px; border-radius: 999px; border: 1px solid rgba(232,163,61,0.3); }
-  .mark-dot { position: absolute; inset: 0; margin: auto; width: 9px; height: 9px; border-radius: 999px; background: var(--accent); box-shadow: 0 0 20px 5px rgba(232,163,61,0.65); }
+  .mark { width: 60px; height: 60px; margin: 0 auto 32px; }
+  .mark svg { width: 100%; height: 100%; }
 
   h1.hero-title { font-size: 54px; font-weight: 700; line-height: 1.06; letter-spacing: -0.025em; margin-bottom: 22px; }
   h1.hero-title span { color: var(--accent); }
@@ -189,7 +188,18 @@
 
   <div class="wrap">
     <section class="hero">
-      <div class="mark"><div class="mark-ring"></div><div class="mark-dot"></div></div>
+      <div class="mark">
+        <svg viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <g stroke="#E8A33D" stroke-width="3" stroke-linecap="round" opacity="0.55">
+            <line x1="58" y1="30" x2="47" y2="6"/>
+            <line x1="58" y1="30" x2="59" y2="2"/>
+            <line x1="58" y1="30" x2="71" y2="8"/>
+          </g>
+          <circle cx="58" cy="32" r="17" fill="#E8A33D" opacity="0.18"/>
+          <circle cx="58" cy="32" r="7" fill="#E8A33D" opacity="0.75"/>
+          <path d="M 14 46 L 26 60 L 26 100 L 92 100 L 92 60 L 104 46" stroke="#E8A33D" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+        </svg>
+      </div>
       <div class="eyebrow">La Boîte de Pandore</div>
       <h1 class="hero-title">Remplacez votre <span>community manager</span> par l'IA</h1>
       <p class="hero-sub">Un système qui ne dort jamais : il trouve les idées, écrit, produit et publie vos contenus — avec un contrôle qualité automatisé à chaque étape. Nous le construisons pour vous.</p>

@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Réponses d'audit — La Boîte de Pandore</title>
 <meta name="robots" content="noindex">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
@@ -34,6 +35,8 @@
 
   .wrap { max-width: 680px; margin: 0 auto; padding: 56px 24px 90px; }
   .eyebrow { font-size: 12px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); margin-bottom: 14px; }
+  .mark { width: 36px; height: 36px; margin-bottom: 16px; }
+  .mark svg { width: 100%; height: 100%; }
   h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 6px; }
   .meta { font-size: 14px; color: var(--mute); margin-bottom: 36px; }
   .meta b { color: var(--text); }
@@ -118,6 +121,18 @@ async function load(){
       : `<div class="section"><h3>Réponses brutes</h3><div class="raw">${esc(JSON.stringify(JSON.parse(data.answers_json || '{}'), null, 2))}</div></div>`;
 
     app.innerHTML = `
+      <div class="mark">
+        <svg viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <g stroke="#E8A33D" stroke-width="4" stroke-linecap="round" opacity="0.55">
+            <line x1="58" y1="30" x2="47" y2="6"/>
+            <line x1="58" y1="30" x2="59" y2="2"/>
+            <line x1="58" y1="30" x2="71" y2="8"/>
+          </g>
+          <circle cx="58" cy="32" r="17" fill="#E8A33D" opacity="0.18"/>
+          <circle cx="58" cy="32" r="7" fill="#E8A33D" opacity="0.75"/>
+          <path d="M 14 46 L 26 60 L 26 100 L 92 100 L 92 60 L 104 46" stroke="#E8A33D" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+        </svg>
+      </div>
       <div class="eyebrow">Audit de besoin</div>
       <h1>${esc(data.name || 'Prospect')}<span class="status-pill">${esc(data.status || 'nouveau')}</span></h1>
       <div class="meta"><b>${esc(data.email || '')}</b> — reçu le ${esc(date)}</div>

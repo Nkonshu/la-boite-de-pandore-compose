@@ -1,5 +1,6 @@
 <!doctype html>
 <title>Audit Pandore</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Work+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap');
 
@@ -76,6 +77,8 @@
     font-family:'IBM Plex Mono', monospace; font-size:12px; letter-spacing:.11em;
     text-transform:uppercase; color:var(--accent-strong); font-weight:600;
   }
+  .intro .mark{ width:36px; height:36px; margin-bottom:16px; }
+  .intro .mark svg{ width:100%; height:100%; }
   .intro p.lead{ font-size:16px; line-height:1.65; color:var(--ink-soft); max-width:60ch; }
   .intro ul.promise{ list-style:none; margin:22px 0; padding:0; display:grid; gap:10px; }
   .intro ul.promise li{
@@ -193,6 +196,18 @@
 
   <!-- INTRO -->
   <div class="step active intro" id="intro">
+    <div class="mark">
+      <svg viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <g stroke="var(--accent)" stroke-width="4" stroke-linecap="round" opacity="0.55">
+          <line x1="58" y1="30" x2="47" y2="6"/>
+          <line x1="58" y1="30" x2="59" y2="2"/>
+          <line x1="58" y1="30" x2="71" y2="8"/>
+        </g>
+        <circle cx="58" cy="32" r="17" fill="var(--accent)" opacity="0.18"/>
+        <circle cx="58" cy="32" r="7" fill="var(--accent)" opacity="0.75"/>
+        <path d="M 14 46 L 26 60 L 26 100 L 92 100 L 92 60 L 104 46" stroke="var(--accent)" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      </svg>
+    </div>
     <div class="eyebrow">Audit de faisabilité</div>
     <h1>Avant de construire votre système, on cadre votre besoin.</h1>
     <p class="lead">33 questions, réparties en 8 courtes étapes (environ 6 minutes). Vos réponses servent à configurer précisément votre pipeline de contenu — ligne éditoriale, ton, fréquence, niveau de validation — avant tout démarrage.</p>

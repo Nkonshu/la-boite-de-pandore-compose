@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Admin — La Boîte de Pandore</title>
 <meta name="robots" content="noindex">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
@@ -37,6 +38,10 @@
   .gate { min-height: 100vh; display: flex; align-items: center; justify-content: center; }
   .gate-box { width: 100%; max-width: 360px; padding: 24px; }
   .gate-box h1 { font-size: 22px; margin-bottom: 20px; }
+  .mark { width: 36px; height: 36px; margin-bottom: 16px; }
+  .mark svg { width: 100%; height: 100%; }
+  .mark.mark-sm { width: 28px; height: 28px; margin-bottom: 0; }
+  .topbar-brand { display: flex; align-items: center; gap: 12px; }
   .gate-box input {
     width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
     padding: 13px 14px; color: var(--text); font-family: inherit; font-size: 15px; margin-bottom: 14px;
@@ -92,6 +97,18 @@
 
 <div class="gate" id="gate">
   <div class="gate-box">
+    <div class="mark">
+      <svg viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <g stroke="#E8A33D" stroke-width="4" stroke-linecap="round" opacity="0.55">
+          <line x1="58" y1="30" x2="47" y2="6"/>
+          <line x1="58" y1="30" x2="59" y2="2"/>
+          <line x1="58" y1="30" x2="71" y2="8"/>
+        </g>
+        <circle cx="58" cy="32" r="17" fill="#E8A33D" opacity="0.18"/>
+        <circle cx="58" cy="32" r="7" fill="#E8A33D" opacity="0.75"/>
+        <path d="M 14 46 L 26 60 L 26 100 L 92 100 L 92 60 L 104 46" stroke="#E8A33D" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      </svg>
+    </div>
     <h1>Administration — La Boîte de Pandore</h1>
     <input type="password" id="pwInput" placeholder="Mot de passe" autocomplete="current-password">
     <div class="err" id="gateErr">Mot de passe incorrect.</div>
@@ -102,9 +119,23 @@
 <div id="dashboard">
   <div class="wrap">
     <div class="topbar">
-      <div>
-        <h1>Contacts &amp; Audits</h1>
-        <div class="sub">La Boîte de Pandore</div>
+      <div class="topbar-brand">
+        <div class="mark mark-sm">
+          <svg viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <g stroke="#E8A33D" stroke-width="4" stroke-linecap="round" opacity="0.55">
+              <line x1="58" y1="30" x2="47" y2="6"/>
+              <line x1="58" y1="30" x2="59" y2="2"/>
+              <line x1="58" y1="30" x2="71" y2="8"/>
+            </g>
+            <circle cx="58" cy="32" r="17" fill="#E8A33D" opacity="0.18"/>
+            <circle cx="58" cy="32" r="7" fill="#E8A33D" opacity="0.75"/>
+            <path d="M 14 46 L 26 60 L 26 100 L 92 100 L 92 60 L 104 46" stroke="#E8A33D" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+          </svg>
+        </div>
+        <div>
+          <h1>Contacts &amp; Audits</h1>
+          <div class="sub">La Boîte de Pandore</div>
+        </div>
       </div>
       <button class="btn btn-ghost btn-sm" onclick="refreshAll()">Rafraîchir</button>
     </div>
