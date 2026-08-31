@@ -1,0 +1,677 @@
+<!doctype html>
+<title>Audit Pandore</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Work+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap');
+
+  :root{
+    --bg:#EDEEE8;
+    --surface:#F8F8F4;
+    --surface-2:#F1F2EB;
+    --ink:#1B1C18;
+    --ink-soft:#5B5D54;
+    --ink-faint:#8B8D82;
+    --border:#D6D7CB;
+    --accent:#9C6D18;
+    --accent-strong:#7C5613;
+    --accent-tint:#F3E7CE;
+    --risk:#A6392C;
+    --good:#3E7C5E;
+    --good-tint:#DFEEE5;
+    --focus:#3E6B8C;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#16171A; --surface:#1D1F21; --surface-2:#222426;
+      --ink:#ECEBE3; --ink-soft:#A6A79C; --ink-faint:#75766C;
+      --border:#33352F; --accent:#D9A63C; --accent-strong:#EEC168;
+      --accent-tint:#3A2E15; --risk:#E08B7C; --good:#7FCBA0; --good-tint:#1E332A;
+      --focus:#8FBBDD;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#16171A; --surface:#1D1F21; --surface-2:#222426;
+    --ink:#ECEBE3; --ink-soft:#A6A79C; --ink-faint:#75766C;
+    --border:#33352F; --accent:#D9A63C; --accent-strong:#EEC168;
+    --accent-tint:#3A2E15; --risk:#E08B7C; --good:#7FCBA0; --good-tint:#1E332A;
+    --focus:#8FBBDD;
+  }
+
+  *{ box-sizing:border-box; }
+  html{ scroll-behavior:smooth; }
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:'Work Sans', system-ui, sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  @media (prefers-reduced-motion: reduce){
+    html{ scroll-behavior:auto; }
+    *{ transition:none !important; animation:none !important; }
+  }
+  :focus-visible{ outline:2px solid var(--focus); outline-offset:2px; }
+
+  .shell{ max-width:760px; margin:0 auto; padding:28px 24px 90px; }
+
+  /* progress */
+  .progress-wrap{
+    position:sticky; top:0; z-index:5;
+    background:var(--bg);
+    padding:14px 0 10px;
+    margin-bottom:8px;
+  }
+  .progress-meta{
+    display:flex; justify-content:space-between; align-items:baseline;
+    font-family:'IBM Plex Mono', monospace; font-size:11.5px;
+    color:var(--ink-faint); margin-bottom:8px;
+  }
+  .progress-meta b{ color:var(--accent-strong); }
+  .progress-track{ height:4px; background:var(--border); border-radius:3px; overflow:hidden; }
+  .progress-fill{ height:100%; background:var(--accent); border-radius:3px; transition:width .35s ease; }
+
+  /* intro */
+  .intro h1{
+    font-family:'Fraunces', Georgia, serif; font-weight:600;
+    font-size:clamp(28px,4.6vw,38px); line-height:1.1; margin:16px 0 12px; text-wrap:balance;
+  }
+  .intro .eyebrow{
+    font-family:'IBM Plex Mono', monospace; font-size:12px; letter-spacing:.11em;
+    text-transform:uppercase; color:var(--accent-strong); font-weight:600;
+  }
+  .intro p.lead{ font-size:16px; line-height:1.65; color:var(--ink-soft); max-width:60ch; }
+  .intro ul.promise{ list-style:none; margin:22px 0; padding:0; display:grid; gap:10px; }
+  .intro ul.promise li{
+    display:flex; gap:10px; font-size:14.5px; color:var(--ink-soft); line-height:1.5;
+  }
+  .intro ul.promise li::before{ content:"—"; color:var(--accent); flex:none; }
+  .btn{
+    font-family:'Work Sans'; font-weight:600; font-size:15px;
+    padding:13px 24px; border-radius:4px; border:1px solid transparent;
+    cursor:pointer; display:inline-flex; align-items:center; gap:8px;
+  }
+  .btn-primary{ background:var(--accent); color:#fff; }
+  .btn-primary:hover{ background:var(--accent-strong); }
+  .btn-ghost{ background:transparent; border-color:var(--border); color:var(--ink); }
+  .btn-ghost:hover{ background:var(--surface-2); }
+  .btn:disabled{ opacity:.45; cursor:not-allowed; }
+
+  /* sections */
+  .step{ display:none; }
+  .step.active{ display:block; animation:fade .3s ease; }
+  @keyframes fade{ from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:none;} }
+
+  .step .eyebrow{ display:flex; align-items:center; gap:10px; margin-bottom:6px;
+    font-family:'IBM Plex Mono', monospace; font-size:12px; letter-spacing:.09em;
+    text-transform:uppercase; color:var(--accent-strong); font-weight:600; }
+  .step .eyebrow .num{ color:var(--ink-faint); }
+  .step h2{ font-family:'Fraunces', Georgia, serif; font-weight:600; font-size:25px;
+    margin:0 0 26px; text-wrap:balance; }
+
+  .q{ margin-bottom:30px; }
+  .q .q-label{ font-size:15.5px; font-weight:600; margin-bottom:3px; line-height:1.4; }
+  .q .q-help{ font-size:13px; color:var(--ink-faint); margin-bottom:12px; }
+  .q .req{ color:var(--risk); margin-left:2px; }
+  .q .q-error{ display:none; font-size:12.5px; color:var(--risk); margin-top:8px; font-weight:500; }
+  .q.invalid .q-error{ display:block; }
+  .q.invalid .options{ outline:1px solid var(--risk); outline-offset:6px; border-radius:6px; }
+
+  .options{ display:grid; gap:8px; }
+  .opt{
+    display:flex; align-items:flex-start; gap:11px;
+    border:1px solid var(--border); background:var(--surface);
+    border-radius:5px; padding:12px 14px; cursor:pointer;
+  }
+  .opt:hover{ border-color:var(--accent); }
+  .opt:has(input:checked){
+    border-color:var(--accent); background:var(--accent-tint);
+  }
+  .opt input{ accent-color:var(--accent); margin-top:3px; flex:none; }
+  .opt .opt-text{ font-size:14.5px; line-height:1.4; }
+  .opt .opt-text .sub{ display:block; font-size:12.5px; color:var(--ink-faint); margin-top:2px; }
+
+  select{
+    width:100%; font-family:'Work Sans'; font-size:14.5px; color:var(--ink);
+    background:var(--surface); border:1px solid var(--border); border-radius:5px;
+    padding:12px 14px; appearance:auto;
+  }
+  select:focus{ border-color:var(--accent); }
+  textarea, input[type="text"], input[type="email"]{
+    width:100%; font-family:'Work Sans'; font-size:14.5px; color:var(--ink);
+    background:var(--surface); border:1px solid var(--border); border-radius:5px;
+    padding:12px 14px; resize:vertical;
+  }
+  textarea:focus, input:focus{ border-color:var(--accent); }
+  .field-note{ font-size:12px; color:var(--ink-faint); margin-top:6px; }
+  .inline-text{ margin-top:10px; }
+
+  .nav-row{ display:flex; justify-content:space-between; align-items:center; margin-top:36px; gap:12px; }
+  .nav-row .spacer{ flex:1; }
+
+  /* review */
+  #review .rev-section{ margin-bottom:26px; }
+  #review .rev-section h3{
+    font-family:'IBM Plex Mono', monospace; font-size:11.5px; letter-spacing:.08em;
+    text-transform:uppercase; color:var(--accent-strong); margin:0 0 10px;
+    border-bottom:1px solid var(--border); padding-bottom:6px;
+  }
+  .rev-item{ display:grid; grid-template-columns:minmax(150px,220px) 1fr; gap:14px; padding:8px 0; font-size:14px; }
+  .rev-item + .rev-item{ border-top:1px dashed var(--border); }
+  .rev-item .rk{ color:var(--ink-faint); }
+  .rev-item .rv{ color:var(--ink); line-height:1.5; }
+  .rev-item .rv.empty{ color:var(--ink-faint); font-style:italic; }
+
+  .send-panel{
+    margin-top:36px; background:var(--surface-2); border:1px solid var(--border);
+    border-radius:6px; padding:24px 26px;
+  }
+  .send-panel h3{ font-family:'Fraunces', Georgia, serif; font-size:19px; margin:0 0 6px; }
+  .send-panel p{ font-size:14px; color:var(--ink-soft); margin:0 0 18px; line-height:1.5; }
+  .send-actions{ display:flex; flex-wrap:wrap; gap:10px; }
+  .status-msg{ margin-top:14px; font-size:13px; color:var(--good); display:none; }
+  .status-msg.show{ display:block; }
+
+  .done-badge{
+    display:inline-block; font-family:'IBM Plex Mono', monospace; font-size:11px;
+    padding:4px 9px; border-radius:20px; background:var(--good-tint); color:var(--good);
+    letter-spacing:.04em;
+  }
+
+  footer.foot{
+    margin-top:56px; padding-top:18px; border-top:1px solid var(--border);
+    font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--ink-faint);
+  }
+
+  @media (max-width:520px){
+    .rev-item{ grid-template-columns:1fr; gap:2px; }
+  }
+</style>
+
+<div class="shell">
+
+  <div class="progress-wrap" id="progressWrap" hidden>
+    <div class="progress-meta"><span>Audit de besoin — La Boîte de Pandore</span><span><b id="stepLabel">1</b>/8</span></div>
+    <div class="progress-track"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+  </div>
+
+  <!-- INTRO -->
+  <div class="step active intro" id="intro">
+    <div class="eyebrow">Audit de faisabilité</div>
+    <h1>Avant de construire votre système, on cadre votre besoin.</h1>
+    <p class="lead">33 questions, réparties en 8 courtes étapes (environ 6 minutes). Vos réponses servent à configurer précisément votre pipeline de contenu — ligne éditoriale, ton, fréquence, niveau de validation — avant tout démarrage.</p>
+    <ul class="promise">
+      <li>Répondez à votre rythme, en cochant les propositions qui vous ressemblent le plus.</li>
+      <li>Aucune bonne ou mauvaise réponse : plus c'est précis, mieux le système sera calibré.</li>
+      <li>À la fin, vous obtenez une synthèse à nous envoyer directement.</li>
+    </ul>
+    <button class="btn btn-primary" onclick="startAudit()">Commencer l'audit →</button>
+  </div>
+
+  <!-- FORM STEPS injected here -->
+  <div id="steps"></div>
+
+  <!-- REVIEW -->
+  <div class="step" id="review">
+    <div class="eyebrow"><span class="done-badge">Terminé</span></div>
+    <h2>Votre synthèse</h2>
+    <p style="color:var(--ink-soft); font-size:14.5px; margin-top:-14px; margin-bottom:28px; max-width:60ch;">Voici un récapitulatif de vos réponses. Vérifiez-le, puis envoyez-le-nous avec l'une des options ci-dessous.</p>
+    <div id="reviewBody"></div>
+
+    <div class="send-panel">
+      <h3>Envoyer votre audit</h3>
+      <p>Trois façons d'envoyer vos réponses — utilisez celle qui vous convient le mieux.</p>
+      <div class="send-actions">
+        <a class="btn btn-primary" id="mailtoBtn" href="#">Envoyer par email</a>
+        <button class="btn btn-ghost" id="copyBtn" onclick="copySynthesis()">Copier le texte</button>
+        <button class="btn btn-ghost" id="downloadBtn" onclick="downloadSynthesis()" hidden>Télécharger (.txt)</button>
+      </div>
+      <div class="status-msg" id="statusMsg"></div>
+    </div>
+
+    <div class="nav-row">
+      <button class="btn btn-ghost" onclick="goToStep(TOTAL_STEPS-1)">← Revoir mes réponses</button>
+    </div>
+  </div>
+
+  <footer class="foot">La Boîte de Pandore — audit de faisabilité gratuit</footer>
+</div>
+
+<script>
+const CONTACT_EMAIL = "3ilnjeuleu@gmail.com";
+
+// ---------- pays → devise ----------
+const CURRENCIES = {
+  EUR:{ symbol:"€", pos:"after", low:200, mid:500, high:1500 },
+  CHF:{ symbol:"CHF ", pos:"before", low:200, mid:500, high:1500 },
+  USD:{ symbol:"$", pos:"before", low:200, mid:550, high:1650 },
+  CAD:{ symbol:"CA$", pos:"before", low:300, mid:750, high:2200 },
+  GBP:{ symbol:"£", pos:"before", low:175, mid:450, high:1300 },
+  MAD:{ symbol:"MAD", pos:"after", low:2200, mid:5500, high:16000 },
+  TND:{ symbol:"TND", pos:"after", low:700, mid:1700, high:5100 },
+  DZD:{ symbol:"DZD", pos:"after", low:30000, mid:75000, high:220000 },
+  XOF:{ symbol:"FCFA", pos:"after", low:130000, mid:330000, high:985000 },
+  XAF:{ symbol:"FCFA", pos:"after", low:130000, mid:330000, high:985000 }
+};
+const COUNTRIES = [
+  {v:"fr", l:"France", cur:"EUR"},
+  {v:"be", l:"Belgique", cur:"EUR"},
+  {v:"lu", l:"Luxembourg", cur:"EUR"},
+  {v:"mc", l:"Monaco", cur:"EUR"},
+  {v:"eu_autre", l:"Autre pays de la zone euro", cur:"EUR"},
+  {v:"ch", l:"Suisse", cur:"CHF"},
+  {v:"ca", l:"Canada", cur:"CAD"},
+  {v:"us", l:"États-Unis", cur:"USD"},
+  {v:"gb", l:"Royaume-Uni", cur:"GBP"},
+  {v:"ma", l:"Maroc", cur:"MAD"},
+  {v:"tn", l:"Tunisie", cur:"TND"},
+  {v:"dz", l:"Algérie", cur:"DZD"},
+  {v:"ci_sn", l:"Sénégal, Côte d'Ivoire et zone UEMOA", cur:"XOF"},
+  {v:"cm_ga", l:"Cameroun, Gabon et zone CEMAC", cur:"XAF"},
+  {v:"autre", l:"Autre pays", cur:null}
+];
+function currencyForCountry(countryVal){
+  const c = COUNTRIES.find(x=>x.v===countryVal);
+  return c ? c.cur : null;
+}
+function fmtCur(cur, n){
+  const c = CURRENCIES[cur];
+  const num = n.toLocaleString('fr-FR');
+  return c.pos === "before" ? `${c.symbol}${num}` : `${num} ${c.symbol}`;
+}
+function budgetOptions(){
+  const cur = currencyForCountry(state.a_pays);
+  if(cur && CURRENCIES[cur]){
+    const c = CURRENCIES[cur];
+    return [
+      {v:"low", l:`Moins de ${fmtCur(cur, c.low)}`},
+      {v:"mid", l:`${fmtCur(cur, c.low)} à ${fmtCur(cur, c.mid)}`},
+      {v:"high", l:`${fmtCur(cur, c.mid)} à ${fmtCur(cur, c.high)}`},
+      {v:"adefinir", l:"À définir selon la proposition"}
+    ];
+  }
+  return [
+    {v:"low", l:"Budget faible, usage occasionnel"},
+    {v:"mid", l:"Budget modéré, investissement mesuré"},
+    {v:"high", l:"Budget confortable, priorité business"},
+    {v:"adefinir", l:"À définir selon la proposition"}
+  ];
+}
+function findQuestion(qid){
+  for(const sec of SECTIONS){ const q = sec.questions.find(qq=>qq.id===qid); if(q) return q; }
+  return null;
+}
+function refreshBudgetQuestion(){
+  const wrap = document.getElementById("qwrap_h1");
+  if(!wrap) return;
+  const optionsDiv = wrap.querySelector(".options");
+  if(!optionsDiv) return;
+  optionsDiv.innerHTML = budgetOptions().map(opt=>`<label class="opt">
+    <input type="radio" name="h1" value="${opt.v}" onchange="onChange('h1','single')" ${state.h1===opt.v?"checked":""}>
+    <span class="opt-text">${opt.l}</span>
+  </label>`).join("");
+}
+
+const SECTIONS = [
+  {
+    id:"a", title:"Vous & votre activité", eyebrow:"01",
+    questions:[
+      {id:"a0", type:"text", label:"Votre nom", required:true, placeholder:"Prénom Nom"},
+      {id:"a0b", type:"text", inputType:"email", label:"Votre email de contact", required:true, placeholder:"vous@exemple.com"},
+      {id:"a_pays", type:"select", label:"Dans quel pays exercez-vous votre activité ?", help:"Sert à afficher les montants de la question budget dans votre devise.", required:true, options: COUNTRIES.map(c=>({v:c.v, l:c.l}))},
+      {id:"a1", type:"single", label:"Quel type de structure êtes-vous ?", required:true, options:[
+        {v:"independant", l:"Indépendant / freelance", s:"Vous vendez votre expertise ou vos services personnellement"},
+        {v:"tpe", l:"TPE / petite entreprise", s:"Commerce, artisan, cabinet, petite structure locale"},
+        {v:"startup", l:"Startup / scale-up", s:"Entreprise en croissance, souvent tech ou produit"},
+        {v:"etablie", l:"Entreprise établie / marque", s:"Structure déjà installée, équipe marketing existante"}
+      ]},
+      {id:"a2", type:"single", label:"Dans quel secteur d'activité évoluez-vous ?", required:true, options:[
+        {v:"ecommerce", l:"E-commerce / retail", s:"Vente de produits physiques ou digitaux en ligne"},
+        {v:"b2b", l:"Services B2B", s:"Vous vendez à d'autres entreprises"},
+        {v:"b2c", l:"Services B2C / grand public", s:"Coaching, bien-être, formation, immobilier, restauration..."},
+        {v:"autre", l:"Autre secteur", s:"Précisez ci-dessous"}
+      ], allowOther:true},
+      {id:"a3", type:"single", label:"Depuis combien de temps exercez-vous cette activité ?", required:true, options:[
+        {v:"lt1", l:"Moins d'1 an"}, {v:"1-3", l:"1 à 3 ans"}, {v:"3-10", l:"3 à 10 ans"}, {v:"gt10", l:"Plus de 10 ans"}
+      ]},
+      {id:"a4", type:"single", label:"Qui décidera de valider ce projet ?", required:true, options:[
+        {v:"seul", l:"Vous seul(e)"}, {v:"associe", l:"Vous et un associé"}, {v:"comite", l:"Une équipe ou un comité"}, {v:"autre", l:"Autre"}
+      ]},
+      {id:"a5", type:"text", area:true, label:"Nom de votre activité / marque, et lien vers votre site ou vos comptes existants", required:false, placeholder:"Ex : Studio Kaïra — instagram.com/studiokaira"}
+    ]
+  },
+  {
+    id:"b", title:"Votre présence actuelle", eyebrow:"02",
+    questions:[
+      {id:"b1", type:"single", label:"Quel est votre niveau d'activité actuel sur les réseaux sociaux ?", required:true, options:[
+        {v:"aucune", l:"Aucune présence"}, {v:"rare", l:"Présence, mais rarement publiée"},
+        {v:"irreguliere", l:"Publication irrégulière"}, {v:"reguliere", l:"Publication déjà régulière"}
+      ]},
+      {id:"b2", type:"single", label:"Quelle est votre audience actuelle, tous comptes confondus ?", required:true, options:[
+        {v:"lt500", l:"Moins de 500 abonnés"}, {v:"500-5k", l:"500 à 5 000"}, {v:"5k-50k", l:"5 000 à 50 000"}, {v:"gt50k", l:"Plus de 50 000"}
+      ]},
+      {id:"b3", type:"single", label:"Avez-vous déjà travaillé avec un community manager ou une agence ?", required:true, options:[
+        {v:"jamais", l:"Jamais"}, {v:"insatisfait", l:"Oui, mais insatisfait du résultat"},
+        {v:"satisfait", l:"Oui, satisfait mais besoin d'évoluer"}, {v:"actuel", l:"Oui, j'en ai encore un actuellement"}
+      ]},
+      {id:"b4", type:"multi", label:"Qu'est-ce qui vous a le plus freiné jusqu'ici ?", help:"Plusieurs réponses possibles.", required:true, options:[
+        {v:"temps", l:"Manque de temps"}, {v:"technique", l:"Manque de compétences techniques"},
+        {v:"idees", l:"Manque d'idées / de régularité"}, {v:"confiance", l:"Manque de confiance à m'exposer"}
+      ]},
+      {id:"b5", type:"multi", label:"Sur quelles plateformes êtes-vous déjà présent(e) ?", help:"Plusieurs réponses possibles.", required:true, options:[
+        {v:"instagram", l:"Instagram"}, {v:"tiktok", l:"TikTok"}, {v:"youtube", l:"YouTube"},
+        {v:"facebook", l:"Facebook"}, {v:"linkedin", l:"LinkedIn"}, {v:"aucune", l:"Aucune"}
+      ]}
+    ]
+  },
+  {
+    id:"c", title:"Positionnement & ligne éditoriale", eyebrow:"03",
+    questions:[
+      {id:"c1", type:"single", label:"Avez-vous déjà une ligne éditoriale claire (sujets, angle, messages clés) ?", required:true, options:[
+        {v:"claire", l:"Oui, bien définie"}, {v:"intuition", l:"Une intuition, rien de formalisé"},
+        {v:"aucune", l:"Aucune pour l'instant"}, {v:"delegue", l:"Je préfère qu'on la construise ensemble"}
+      ]},
+      {id:"c2", type:"single", label:"Comment souhaitez-vous apparaître ?", required:true, options:[
+        {v:"perso", l:"Marque personnelle", s:"Votre visage, votre voix"}, {v:"business", l:"Marque business", s:"Une entité distincte de vous"},
+        {v:"melange", l:"Un mélange des deux"}
+      ]},
+      {id:"c3", type:"single", label:"Quel ton correspond le mieux à ce que vous voulez transmettre ?", required:true, options:[
+        {v:"brut", l:"Authentique et brut"}, {v:"soigne", l:"Professionnel et soigné"},
+        {v:"clivant", l:"Percutant et clivant"}, {v:"pedagogique", l:"Pédagogique et rassurant"}
+      ]},
+      {id:"c4", type:"text", area:true, label:"Y a-t-il des sujets, mots ou formats à éviter absolument ?", required:false, placeholder:"Ex : pas d'humour, jamais de politique, pas de visage à l'écran..."},
+      {id:"c5", type:"text", area:true, label:"Des concurrents ou des comptes qui vous inspirent ?", required:false, placeholder:"Noms de comptes ou de marques"}
+    ]
+  },
+  {
+    id:"d", title:"Votre cible", eyebrow:"04",
+    questions:[
+      {id:"d1", type:"text", area:true, label:"À qui souhaitez-vous vous adresser en priorité ?", required:true, placeholder:"Décrivez votre client idéal en quelques mots"},
+      {id:"d2", type:"single", label:"Quelle tranche d'âge correspond le mieux à votre client idéal ?", required:true, options:[
+        {v:"lt25", l:"Moins de 25 ans"}, {v:"25-40", l:"25 à 40 ans"}, {v:"40-60", l:"40 à 60 ans"}, {v:"gt60", l:"60 ans et plus"}
+      ]},
+      {id:"d3", type:"single", label:"Votre cible est plutôt...", required:true, options:[
+        {v:"grandpublic", l:"Grand public généraliste"}, {v:"niche", l:"Une niche précise et engagée"},
+        {v:"pro", l:"Des professionnels / décideurs"}, {v:"mixte", l:"Mixte"}
+      ]}
+    ]
+  },
+  {
+    id:"e", title:"Vos objectifs", eyebrow:"05",
+    questions:[
+      {id:"e1", type:"multi", label:"Quel est votre objectif principal avec les réseaux sociaux ?", help:"Cochez tout ce qui s'applique.", required:true, options:[
+        {v:"leads", l:"Générer des leads / clients directement"}, {v:"notoriete", l:"Construire ma notoriété"},
+        {v:"communaute", l:"Créer une communauté engagée"}, {v:"vendre", l:"Vendre une offre précise"}
+      ]},
+      {id:"e2", type:"single", label:"Sur quel horizon voulez-vous voir des résultats ?", required:true, options:[
+        {v:"1-2mois", l:"1 à 2 mois"}, {v:"3-6mois", l:"3 à 6 mois"}, {v:"6-12mois", l:"6 à 12 mois"}, {v:"aucune", l:"Pas d'échéance précise"}
+      ]},
+      {id:"e3", type:"single", label:"Que devient le contact généré par les réseaux ?", required:true, options:[
+        {v:"vente", l:"Vente directe / DM"}, {v:"rdv", l:"Prise de rendez-vous"},
+        {v:"redirection", l:"Redirection vers site / newsletter"}, {v:"reflechi", l:"Pas encore réfléchi"}
+      ]},
+      {id:"e4", type:"text", area:true, label:"À quoi ressemblera pour vous un succès dans 6 mois ?", required:false, placeholder:"Décrivez concrètement ce que vous espérez"}
+    ]
+  },
+  {
+    id:"f", title:"Format & fréquence", eyebrow:"06",
+    questions:[
+      {id:"f1", type:"single", label:"Quel format de contenu préférez-vous mettre en avant ?", required:true, options:[
+        {v:"video", l:"Vidéo courte", s:"Reels, Shorts, TikTok"}, {v:"carrousel", l:"Carrousels / visuels"},
+        {v:"texte", l:"Texte / storytelling"}, {v:"mix", l:"Mix équilibré"}
+      ]},
+      {id:"f2", type:"single", label:"À quelle fréquence souhaitez-vous publier ?", required:true, options:[
+        {v:"quotidienne", l:"Quotidienne"}, {v:"3-4semaine", l:"3 à 4 fois par semaine"},
+        {v:"1-2semaine", l:"1 à 2 fois par semaine"}, {v:"adefinir", l:"À définir ensemble"}
+      ]},
+      {id:"f3", type:"single", label:"Disposez-vous déjà de matière à exploiter (vidéos, photos, écrits) ?", required:true, options:[
+        {v:"beaucoup", l:"Beaucoup de matière"}, {v:"unpeu", l:"Un peu"}, {v:"rien", l:"Rien, tout est à créer"}
+      ]}
+    ]
+  },
+  {
+    id:"g", title:"Fonctionnement avec votre système", eyebrow:"07",
+    questions:[
+      {id:"g1", type:"single", label:"Quel niveau de validation souhaitez-vous avant publication ?", required:true, options:[
+        {v:"toutvalider", l:"Tout valider, au moins au début"}, {v:"echantillon", l:"Validation par échantillon"},
+        {v:"confiance", l:"Confiance totale dès le départ"}
+      ]},
+      {id:"g2", type:"single", label:"Combien de temps pouvez-vous consacrer chaque semaine à ce suivi ?", required:true, options:[
+        {v:"lt1h", l:"Moins d'1h"}, {v:"1-3h", l:"1 à 3h"}, {v:"gt3h", l:"Plus de 3h"}, {v:"aucun", l:"Aucun temps disponible"}
+      ]},
+      {id:"g3", type:"single", label:"À quelle fréquence voulez-vous un point ou un reporting ?", required:true, options:[
+        {v:"quotidien", l:"Quotidien"}, {v:"hebdo", l:"Hebdomadaire"}, {v:"mensuel", l:"Mensuel"}, {v:"probleme", l:"Seulement en cas de problème"}
+      ]},
+      {id:"g4", type:"single", label:"Quel est votre rapport à l'intelligence artificielle pour ce type de mission ?", required:true, options:[
+        {v:"enthousiaste", l:"Enthousiaste"}, {v:"pragmatique", l:"Pragmatique, peu importe qui le fait"},
+        {v:"mefiant", l:"Méfiant mais ouvert à essayer"}, {v:"reticent", l:"Réticent, je préférerais un humain"}
+      ]}
+    ]
+  },
+  {
+    id:"h", title:"Contraintes & budget", eyebrow:"08",
+    questions:[
+      {id:"h1", type:"single", label:"Quel budget mensuel envisagez-vous pour ce service ?", help:"Affiché dans la devise du pays indiqué en début de questionnaire.", required:true, getOptions:budgetOptions, options:[], allowOther:true, otherPlaceholder:"Montant exact si vous préférez préciser (ex : 350 €)"},
+      {id:"h2", type:"single", label:"Y a-t-il des contraintes légales ou réglementaires propres à votre secteur ?", required:true, options:[
+        {v:"oui", l:"Oui — précisez ci-dessous"}, {v:"non", l:"Non"}, {v:"sais_pas", l:"Je ne sais pas"}
+      ], allowOther:true},
+      {id:"h3", type:"single", label:"Avez-vous une charte graphique ou une identité visuelle existante ?", required:true, options:[
+        {v:"complete", l:"Oui, complète"}, {v:"partielle", l:"Partielle"}, {v:"aucune", l:"Aucune"}
+      ]}
+    ]
+  }
+];
+
+const state = {};
+const TOTAL_STEPS = SECTIONS.length + 1; // + review
+let currentStep = -1; // -1 = intro
+
+function startAudit(){
+  document.getElementById("intro").classList.remove("active");
+  document.getElementById("progressWrap").hidden = false;
+  currentStep = 0;
+  render();
+}
+
+function fieldHtml(sec, q){
+  let inner = "";
+  if(q.type === "single" || q.type === "multi"){
+    const inputType = q.type === "single" ? "radio" : "checkbox";
+    const opts = q.getOptions ? q.getOptions() : q.options;
+    inner += `<div class="options">`;
+    opts.forEach(opt=>{
+      inner += `<label class="opt">
+        <input type="${inputType}" name="${q.id}" value="${opt.v}" onchange="onChange('${q.id}','${q.type}')">
+        <span class="opt-text">${opt.l}${opt.s?`<span class="sub">${opt.s}</span>`:""}</span>
+      </label>`;
+    });
+    inner += `</div>`;
+    if(q.allowOther){
+      inner += `<div class="inline-text"><input type="text" id="${q.id}_other" placeholder="${q.otherPlaceholder||'Précisez si besoin'}" oninput="onOtherInput('${q.id}')"></div>`;
+    }
+  } else if(q.type === "select"){
+    inner += `<select id="${q.id}" onchange="onSelectChange('${q.id}')">
+      <option value="">Sélectionnez…</option>
+      ${q.options.map(opt=>`<option value="${opt.v}">${opt.l}</option>`).join("")}
+    </select>`;
+  } else if(q.type === "text"){
+    if(q.area){
+      inner += `<textarea id="${q.id}" rows="3" placeholder="${q.placeholder||''}" oninput="onTextInput('${q.id}')"></textarea>`;
+    } else {
+      inner += `<input type="${q.inputType||'text'}" id="${q.id}" placeholder="${q.placeholder||''}" oninput="onTextInput('${q.id}')">`;
+    }
+  }
+  return `<div class="q" id="qwrap_${q.id}">
+    <div class="q-label">${q.label}${q.required?'<span class="req">*</span>':''}</div>
+    ${q.help?`<div class="q-help">${q.help}</div>`:""}
+    ${inner}
+    <div class="q-error">Merci de répondre à cette question avant de continuer.</div>
+  </div>`;
+}
+
+function render(){
+  const stepsEl = document.getElementById("steps");
+  stepsEl.innerHTML = SECTIONS.map((sec, i)=>{
+    const qs = sec.questions.map(q=>fieldHtml(sec,q)).join("");
+    const isLast = i === SECTIONS.length - 1;
+    return `<div class="step" id="step_${i}">
+      <div class="eyebrow"><span class="num">${sec.eyebrow}</span> ${sec.title}</div>
+      <h2>${sec.title}</h2>
+      ${qs}
+      <div class="nav-row">
+        <button class="btn btn-ghost" onclick="prevStep()">${i===0 ? "← Retour à l'intro" : "← Précédent"}</button>
+        <div class="spacer"></div>
+        <button class="btn btn-primary" onclick="${isLast ? 'finishAudit()' : 'nextStep()'}">${isLast ? "Voir ma synthèse" : "Suivant →"}</button>
+      </div>
+    </div>`;
+  }).join("");
+  goToStep(currentStep);
+}
+
+function goToStep(i){
+  currentStep = i;
+  refreshBudgetQuestion();
+  document.querySelectorAll("#steps .step").forEach((el,idx)=>{
+    el.classList.toggle("active", idx === i);
+  });
+  document.getElementById("review").classList.remove("active");
+  document.getElementById("stepLabel").textContent = Math.min(i+1, SECTIONS.length);
+  document.getElementById("progressFill").style.width = ((i)/SECTIONS.length*100)+"%";
+  window.scrollTo({top:0, behavior:"instant" in window ? "instant" : "auto"});
+}
+
+function prevStep(){
+  if(currentStep === 0){
+    document.getElementById("steps").querySelectorAll(".step").forEach(el=>el.classList.remove("active"));
+    document.getElementById("progressWrap").hidden = true;
+    document.getElementById("intro").classList.add("active");
+    currentStep = -1;
+  } else {
+    goToStep(currentStep-1);
+  }
+}
+
+function nextStep(){
+  if(!validateStep(currentStep)) return;
+  goToStep(currentStep+1);
+}
+
+function onChange(qid, type){
+  if(type === "single"){
+    const el = document.querySelector(`input[name="${qid}"]:checked`);
+    state[qid] = el ? el.value : null;
+  } else {
+    const els = document.querySelectorAll(`input[name="${qid}"]:checked`);
+    state[qid] = Array.from(els).map(e=>e.value);
+  }
+  clearError(qid);
+}
+function onSelectChange(qid){
+  state[qid] = document.getElementById(qid).value;
+  clearError(qid);
+  if(qid === "a_pays") refreshBudgetQuestion();
+}
+function onOtherInput(qid){ state[qid+"_other"] = document.getElementById(qid+"_other").value; }
+function onTextInput(qid){ state[qid] = document.getElementById(qid).value; clearError(qid); }
+function clearError(qid){ const w = document.getElementById("qwrap_"+qid); if(w) w.classList.remove("invalid"); }
+
+function validateStep(i){
+  const sec = SECTIONS[i];
+  let ok = true, firstInvalid = null;
+  sec.questions.forEach(q=>{
+    if(!q.required) return;
+    const val = state[q.id];
+    const empty = q.type === "multi" ? (!val || val.length===0) : (!val || String(val).trim()==="");
+    const w = document.getElementById("qwrap_"+q.id);
+    if(empty){
+      ok = false;
+      w.classList.add("invalid");
+      if(!firstInvalid) firstInvalid = w;
+    } else {
+      w.classList.remove("invalid");
+    }
+  });
+  if(firstInvalid) firstInvalid.scrollIntoView({behavior:"smooth", block:"center"});
+  return ok;
+}
+
+function labelFor(sec, q, rawVal){
+  if(q.type === "text") return rawVal || "";
+  const opts = q.getOptions ? q.getOptions() : q.options;
+  const vals = Array.isArray(rawVal) ? rawVal : [rawVal];
+  const labels = vals.filter(Boolean).map(v=>{
+    const opt = opts.find(o=>o.v===v);
+    return opt ? opt.l : v;
+  });
+  let out = labels.join(", ");
+  if(q.allowOther && state[q.id+"_other"]) out += ` (${state[q.id+"_other"]})`;
+  return out;
+}
+
+function buildSynthesisText(){
+  const lines = [];
+  lines.push("AUDIT DE BESOIN — LA BOÎTE DE PANDORE");
+  lines.push(`Prospect : ${state.a0 || "—"} (${state.a0b || "—"})`);
+  lines.push("");
+  SECTIONS.forEach(sec=>{
+    lines.push(`## ${sec.title}`);
+    sec.questions.forEach(q=>{
+      if(q.id === "a0" || q.id === "a0b") return;
+      const v = labelFor(sec, q, state[q.id]);
+      lines.push(`- ${q.label} → ${v && v.trim() ? v : "(non renseigné)"}`);
+    });
+    lines.push("");
+  });
+  return lines.join("\n");
+}
+
+function finishAudit(){
+  if(!validateStep(currentStep)) return;
+  document.querySelectorAll("#steps .step").forEach(el=>el.classList.remove("active"));
+  document.getElementById("progressWrap").hidden = true;
+  const reviewBody = document.getElementById("reviewBody");
+  reviewBody.innerHTML = SECTIONS.map(sec=>{
+    const items = sec.questions.filter(q=>q.id!=="a0" && q.id!=="a0b").map(q=>{
+      const v = labelFor(sec, q, state[q.id]);
+      return `<div class="rev-item"><div class="rk">${q.label}</div><div class="rv ${v&&v.trim()?'':'empty'}">${v&&v.trim()?v:"non renseigné"}</div></div>`;
+    }).join("");
+    return `<div class="rev-section"><h3>${sec.title}</h3>${items}</div>`;
+  }).join("");
+
+  const synth = buildSynthesisText();
+  const subject = `Audit de besoin — ${state.a0 || "Prospect"}`;
+  const mailto = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(synth)}`;
+  document.getElementById("mailtoBtn").href = mailto;
+
+  document.getElementById("review").classList.add("active");
+  window.scrollTo({top:0});
+}
+
+function copySynthesis(){
+  const text = buildSynthesisText();
+  const status = document.getElementById("statusMsg");
+  navigator.clipboard.writeText(text).then(()=>{
+    status.textContent = "Synthèse copiée — collez-la dans un email ou un message.";
+    status.classList.add("show");
+  }).catch(()=>{
+    status.textContent = "La copie automatique n'a pas fonctionné sur ce navigateur — utilisez le téléchargement ou l'email.";
+    status.classList.add("show");
+  });
+}
+
+function downloadSynthesis(){
+  const text = buildSynthesisText();
+  const name = (state.a0 || "audit").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/(^-|-$)/g,"") || "audit";
+  const blob = new Blob([text], {type:"text/plain;charset=utf-8"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `audit-besoin-${name}.txt`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  const status = document.getElementById("statusMsg");
+  status.textContent = "Fichier téléchargé.";
+  status.classList.add("show");
+}
+document.addEventListener("DOMContentLoaded", () => {
+  document.getElementById("downloadBtn").hidden = false;
+});
+</script>
