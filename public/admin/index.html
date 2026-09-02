@@ -89,6 +89,8 @@
   .pill { display: inline-block; font-family: 'IBM Plex Mono', monospace; font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 999px; text-transform: uppercase; letter-spacing: 0.04em; }
   .pill.nouveau { background: rgba(232,163,61,0.14); color: var(--accent); }
   .pill.traite { background: rgba(61,189,140,0.14); color: var(--good); }
+  .pill.go { background: rgba(139,144,154,0.14); color: var(--mute); }
+  .muted-note { color: var(--mute-dim); font-size: 12px; }
 
   .empty-row td { text-align: center; color: var(--mute-dim); padding: 28px; }
 </style>
@@ -268,6 +270,16 @@ function renderContacts(){
   `).join('');
 }
 
+// Libellés des statuts Pandore (Go) — distincts du binaire nouveau/traité
+// hérité de n8n : ces audits n'ont pas d'équivalent "traité" côté Go (voir
+// docs/05_CLIENT_LIFECYCLE.md, étape 8 — seuls approve/reject existent, et
+// ils ont de vraies conséquences business, jamais déclenchés depuis ce
+// simple bouton).
+const GO_STATUS_LABELS = {
+  RECEIVED: 'reçu', PROCESSING: 'analyse en cours', NEEDS_INFORMATION: 'infos manquantes',
+  ANALYZED: 'analysé', FAILED: 'échec analyse', REJECTED: 'rejeté',
+};
+
 function renderAudits(){
   const tbody = document.querySelector('#auditsTable tbody');
   if(auditsCache.length === 0){
@@ -275,18 +287,34 @@ function renderAudits(){
     return;
   }
   const sorted = [...auditsCache].sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
-  tbody.innerHTML = sorted.map(a => `
-    <tr>
-      <td class="date">${fmtDate(a.createdAt)}</td>
-      <td>${esc(a.name || '')}</td>
-      <td class="email">${esc(a.email || '')}</td>
-      <td><span class="pill ${a.status === 'traite' ? 'traite' : 'nouveau'}">${a.status === 'traite' ? 'traité' : 'nouveau'}</span></td>
-      <td><a href="/audit/result?id=${encodeURIComponent(a.audit_id)}" target="_blank">Voir les réponses →</a></td>
-      <td>${a.status === 'traite'
-        ? ''
-        : `<button class="btn btn-ghost btn-sm" onclick="markAudit(${a.id})">Marquer traité</button>`}</td>
-    </tr>
-  `).join('');
+  tbody.innerHTML = sorted.map(a => {
+    const isGo = a.source === 'go';
+    if(isGo){
+      const label = GO_STATUS_LABELS[a.status] || a.status;
+      return `
+        <tr>
+          <td class="date">${fmtDate(a.createdAt)}</td>
+          <td>${esc(a.name || '')}</td>
+          <td class="email">${esc(a.email || '')}</td>
+          <td><span class="pill go">${esc(label)}</span></td>
+          <td><a href="/audit/result?id=${encodeURIComponent(a.audit_id)}" target="_blank">Voir les réponses →</a></td>
+          <td><span class="muted-note">via Admin API</span></td>
+        </tr>
+      `;
+    }
+    return `
+      <tr>
+        <td class="date">${fmtDate(a.createdAt)}</td>
+        <td>${esc(a.name || '')}</td>
+        <td class="email">${esc(a.email || '')}</td>
+        <td><span class="pill ${a.status === 'traite' ? 'traite' : 'nouveau'}">${a.status === 'traite' ? 'traité' : 'nouveau'}</span></td>
+        <td><a href="/audit/result?id=${encodeURIComponent(a.audit_id)}" target="_blank">Voir les réponses →</a></td>
+        <td>${a.status === 'traite'
+          ? ''
+          : `<button class="btn btn-ghost btn-sm" onclick="markAudit(${a.id})">Marquer traité</button>`}</td>
+      </tr>
+    `;
+  }).join('');
 }
 
 async function markContact(id){

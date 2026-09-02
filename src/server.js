@@ -154,6 +154,17 @@ const N8N_BASE = process.env.N8N_BASE || 'https://n8n.le-shabba.fr';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 const INTERNAL_SECRET = process.env.PANDORE_INTERNAL_SECRET;
 
+// PANDORE_API_BASE — adresse interne de pandore-api (Go), atteinte via la
+// gateway du réseau Docker Coolify (le process tourne sur l'hôte, hors
+// Docker — voir scripts/deploy/deploy.sh du repo pandore), jamais exposée
+// publiquement.
+const PANDORE_API_BASE = process.env.PANDORE_API_BASE || 'http://10.0.1.1:4000';
+// AUDIT_BACKEND — bascule étape 8 (docs/05_CLIENT_LIFECYCLE.md, repo
+// pandore) : 'go' (Go, par défaut) ou 'n8n' (rollback immédiat sans
+// redéploiement, juste une variable d'env Coolify à changer). À retirer
+// une fois le rollback n8n plus nécessaire.
+const AUDIT_BACKEND = process.env.AUDIT_BACKEND || 'go';
+
 async function n8nWebhook(pathAndQuery, opts = {}) {
   const res = await fetch(`${N8N_BASE}/webhook/${pathAndQuery}`, opts);
   const text = await res.text();
@@ -191,12 +202,25 @@ app.post('/api/audit', async (req, res) => {
   const { name, email, answers, synthesis } = req.body || {};
   if (!name || !email || !answers) return res.status(400).json({ error: 'name, email et answers sont requis' });
   try {
-    const { status, data } = await n8nWebhook('pandore-audit-submit', {
+    if (AUDIT_BACKEND === 'n8n') {
+      const { status, data } = await n8nWebhook('pandore-audit-submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, answers, synthesis }),
+      });
+      return res.status(status).json(data);
+    }
+    // Idempotency-Key dérivée du contenu (jamais aléatoire) : un vrai
+    // retry du même formulaire (réseau, double-clic) redonne la même clé
+    // et rejoue la même soumission côté Go plutôt que d'en créer deux.
+    const idempotencyKey = crypto.createHash('sha256').update(JSON.stringify({ email, answers })).digest('hex');
+    const goRes = await fetch(`${PANDORE_API_BASE}/public/audits`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, email, answers, synthesis }),
+      headers: { 'Content-Type': 'application/json', 'Idempotency-Key': idempotencyKey },
+      body: JSON.stringify({ audit_schema_version: 'v1', raw_answers: answers }),
     });
-    res.status(status).json(data);
+    const data = await goRes.json();
+    res.status(goRes.status).json(data);
   } catch (err) {
     console.error(err);
     res.status(502).json({ error: 'Envoi impossible pour le moment' });
@@ -205,8 +229,25 @@ app.post('/api/audit', async (req, res) => {
 
 app.get('/api/audit/:id', async (req, res) => {
   try {
-    const { status, data } = await n8nWebhook(`pandore-audit-result?id=${encodeURIComponent(req.params.id)}`, { method: 'GET' });
-    res.status(status).json(data);
+    if (AUDIT_BACKEND === 'n8n') {
+      const { status, data } = await n8nWebhook(`pandore-audit-result?id=${encodeURIComponent(req.params.id)}`, { method: 'GET' });
+      return res.status(status).json(data);
+    }
+    // GET /public/audits/{token} (pandore, étape 8) : DTO dédié, jamais le
+    // même contrat que l'ancien webhook n8n — traduit ici vers la forme
+    // attendue par public/audit/result/index.html plutôt que de modifier
+    // cette page.
+    const goRes = await fetch(`${PANDORE_API_BASE}/public/audits/${encodeURIComponent(req.params.id)}`);
+    if (goRes.status === 404) return res.status(404).json({ error: 'not_found' });
+    if (!goRes.ok) throw new Error(`go_status_${goRes.status}`);
+    const data = await goRes.json();
+    res.json({
+      name: data.name,
+      email: data.email,
+      status: data.status,
+      createdAt: data.submitted_at,
+      synthesis: `## Réponses de l'audit\n${data.summary}`,
+    });
   } catch (err) {
     console.error(err);
     res.status(502).json({ error: 'Lecture impossible pour le moment' });
@@ -227,14 +268,42 @@ app.get('/api/admin/contacts', async (req, res) => {
   }
 });
 
+// toAdminAuditView traduit un core.AuditSubmission (Go, champs PascalCase —
+// ce type n'a pas de tags JSON, contrairement aux DTO dédiés) vers la forme
+// attendue par public/admin/index.html. audit_id porte le
+// PublicAccessToken, jamais l'ID interne (même règle que partout ailleurs
+// dans cette bascule) — la page de résultat le résout via
+// GET /public/audits/{token}.
+function toAdminAuditView(submission) {
+  const answers = submission.RawAnswers || {};
+  return {
+    id: submission.ID,
+    createdAt: submission.SubmittedAt,
+    name: answers.a0 || '',
+    email: answers.a0b || '',
+    status: submission.Status,
+    audit_id: submission.PublicAccessToken || submission.ID,
+    source: 'go',
+  };
+}
+
 app.get('/api/admin/audits', async (req, res) => {
   if (!checkAdmin(req, res)) return;
   try {
-    const { status, data } = await n8nWebhook('pandore-admin-audits', {
-      method: 'GET',
-      headers: { 'x-internal-secret': INTERNAL_SECRET },
-    });
-    res.status(status).json(data);
+    // Fusion de deux sources tant que n8n reste le stockage historique
+    // (audiences soumises avant la bascule étape 8) et Go la nouvelle
+    // (docs/05_CLIENT_LIFECYCLE.md) — jamais l'une remplaçant l'autre en
+    // silence, sous peine de faire disparaître des audits déjà reçus.
+    const [n8nResult, goResult] = await Promise.all([
+      n8nWebhook('pandore-admin-audits', { method: 'GET', headers: { 'x-internal-secret': INTERNAL_SECRET } })
+        .catch(err => { console.error('admin audits (n8n):', err); return { status: 200, data: [] }; }),
+      fetch(`${PANDORE_API_BASE}/admin/audits`, { headers: { 'x-internal-secret': INTERNAL_SECRET } })
+        .then(async r => ({ status: r.status, data: await r.json() }))
+        .catch(err => { console.error('admin audits (go):', err); return { status: 200, data: [] }; }),
+    ]);
+    const n8nAudits = Array.isArray(n8nResult.data) ? n8nResult.data : [];
+    const goAudits = Array.isArray(goResult.data) ? goResult.data.map(toAdminAuditView) : [];
+    res.json([...n8nAudits, ...goAudits]);
   } catch (err) {
     console.error(err);
     res.status(502).json({ error: 'Lecture impossible' });
