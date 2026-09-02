@@ -253,76 +253,26 @@
 </div>
 
 <script>
-// ---------- pays → devise ----------
-const CURRENCIES = {
-  EUR:{ symbol:"€", pos:"after", low:200, mid:500, high:1500 },
-  CHF:{ symbol:"CHF ", pos:"before", low:200, mid:500, high:1500 },
-  USD:{ symbol:"$", pos:"before", low:200, mid:550, high:1650 },
-  CAD:{ symbol:"CA$", pos:"before", low:300, mid:750, high:2200 },
-  GBP:{ symbol:"£", pos:"before", low:175, mid:450, high:1300 },
-  MAD:{ symbol:"MAD", pos:"after", low:2200, mid:5500, high:16000 },
-  TND:{ symbol:"TND", pos:"after", low:700, mid:1700, high:5100 },
-  DZD:{ symbol:"DZD", pos:"after", low:30000, mid:75000, high:220000 },
-  XOF:{ symbol:"FCFA", pos:"after", low:130000, mid:330000, high:985000 },
-  XAF:{ symbol:"FCFA", pos:"after", low:130000, mid:330000, high:985000 }
-};
 const COUNTRIES = [
-  {v:"fr", l:"France", cur:"EUR"},
-  {v:"be", l:"Belgique", cur:"EUR"},
-  {v:"lu", l:"Luxembourg", cur:"EUR"},
-  {v:"mc", l:"Monaco", cur:"EUR"},
-  {v:"eu_autre", l:"Autre pays de la zone euro", cur:"EUR"},
-  {v:"ch", l:"Suisse", cur:"CHF"},
-  {v:"ca", l:"Canada", cur:"CAD"},
-  {v:"us", l:"États-Unis", cur:"USD"},
-  {v:"gb", l:"Royaume-Uni", cur:"GBP"},
-  {v:"ma", l:"Maroc", cur:"MAD"},
-  {v:"tn", l:"Tunisie", cur:"TND"},
-  {v:"dz", l:"Algérie", cur:"DZD"},
-  {v:"ci_sn", l:"Sénégal, Côte d'Ivoire et zone UEMOA", cur:"XOF"},
-  {v:"cm_ga", l:"Cameroun, Gabon et zone CEMAC", cur:"XAF"},
-  {v:"autre", l:"Autre pays", cur:null}
+  {v:"fr", l:"France"},
+  {v:"be", l:"Belgique"},
+  {v:"lu", l:"Luxembourg"},
+  {v:"mc", l:"Monaco"},
+  {v:"eu_autre", l:"Autre pays de la zone euro"},
+  {v:"ch", l:"Suisse"},
+  {v:"ca", l:"Canada"},
+  {v:"us", l:"États-Unis"},
+  {v:"gb", l:"Royaume-Uni"},
+  {v:"ma", l:"Maroc"},
+  {v:"tn", l:"Tunisie"},
+  {v:"dz", l:"Algérie"},
+  {v:"ci_sn", l:"Sénégal, Côte d'Ivoire et zone UEMOA"},
+  {v:"cm_ga", l:"Cameroun, Gabon et zone CEMAC"},
+  {v:"autre", l:"Autre pays"}
 ];
-function currencyForCountry(countryVal){
-  const c = COUNTRIES.find(x=>x.v===countryVal);
-  return c ? c.cur : null;
-}
-function fmtCur(cur, n){
-  const c = CURRENCIES[cur];
-  const num = n.toLocaleString('fr-FR');
-  return c.pos === "before" ? `${c.symbol}${num}` : `${num} ${c.symbol}`;
-}
-function budgetOptions(){
-  const cur = currencyForCountry(state.a_pays);
-  if(cur && CURRENCIES[cur]){
-    const c = CURRENCIES[cur];
-    return [
-      {v:"low", l:`Moins de ${fmtCur(cur, c.low)}`},
-      {v:"mid", l:`${fmtCur(cur, c.low)} à ${fmtCur(cur, c.mid)}`},
-      {v:"high", l:`${fmtCur(cur, c.mid)} à ${fmtCur(cur, c.high)}`},
-      {v:"adefinir", l:"À définir selon la proposition"}
-    ];
-  }
-  return [
-    {v:"low", l:"Budget faible, usage occasionnel"},
-    {v:"mid", l:"Budget modéré, investissement mesuré"},
-    {v:"high", l:"Budget confortable, priorité business"},
-    {v:"adefinir", l:"À définir selon la proposition"}
-  ];
-}
 function findQuestion(qid){
   for(const sec of SECTIONS){ const q = sec.questions.find(qq=>qq.id===qid); if(q) return q; }
   return null;
-}
-function refreshBudgetQuestion(){
-  const wrap = document.getElementById("qwrap_h1");
-  if(!wrap) return;
-  const optionsDiv = wrap.querySelector(".options");
-  if(!optionsDiv) return;
-  optionsDiv.innerHTML = budgetOptions().map(opt=>`<label class="opt">
-    <input type="radio" name="h1" value="${opt.v}" onchange="onChange('h1','single')" ${state.h1===opt.v?"checked":""}>
-    <span class="opt-text">${opt.l}</span>
-  </label>`).join("");
 }
 
 const SECTIONS = [
@@ -331,7 +281,7 @@ const SECTIONS = [
     questions:[
       {id:"a0", type:"text", label:"Votre nom", required:true, placeholder:"Prénom Nom"},
       {id:"a0b", type:"text", inputType:"email", label:"Votre email de contact", required:true, placeholder:"vous@exemple.com"},
-      {id:"a_pays", type:"select", label:"Dans quel pays exercez-vous votre activité ?", help:"Sert à afficher les montants de la question budget dans votre devise.", required:true, options: COUNTRIES.map(c=>({v:c.v, l:c.l}))},
+      {id:"a_pays", type:"select", label:"Dans quel pays exercez-vous votre activité ?", help:"Sert à adapter le contenu à votre marché local.", required:true, options: COUNTRIES.map(c=>({v:c.v, l:c.l}))},
       {id:"a1", type:"single", label:"Quel type de structure êtes-vous ?", required:true, options:[
         {v:"independant", l:"Indépendant / freelance", s:"Vous vendez votre expertise ou vos services personnellement"},
         {v:"tpe", l:"TPE / petite entreprise", s:"Commerce, artisan, cabinet, petite structure locale"},
@@ -471,9 +421,14 @@ const SECTIONS = [
     ]
   },
   {
-    id:"h", title:"Contraintes & budget", eyebrow:"08",
+    id:"h", title:"Contraintes & niveau d'engagement", eyebrow:"08",
     questions:[
-      {id:"h1", type:"single", label:"Quel budget mensuel envisagez-vous pour ce service ?", help:"Affiché dans la devise du pays indiqué en début de questionnaire.", required:true, getOptions:budgetOptions, options:[], allowOther:true, otherPlaceholder:"Montant exact si vous préférez préciser (ex : 350 €)"},
+      {id:"h1", type:"single", label:"Quel type d'accompagnement recherchez-vous ?", required:true, options:[
+        {v:"leger", l:"Une solution ponctuelle et légère, pour tester"},
+        {v:"regulier", l:"Un accompagnement régulier et structuré"},
+        {v:"complet", l:"Une prise en charge complète, sur-mesure"},
+        {v:"sais_pas", l:"Je ne sais pas encore, je découvre ce qui existe"}
+      ]},
       {id:"h2", type:"single", label:"Y a-t-il des contraintes légales ou réglementaires propres à votre secteur ?", required:true, options:[
         {v:"oui", l:"Oui — précisez ci-dessous"}, {v:"non", l:"Non"}, {v:"sais_pas", l:"Je ne sais pas"}
       ], allowOther:true},
@@ -552,7 +507,6 @@ function render(){
 
 function goToStep(i){
   currentStep = i;
-  refreshBudgetQuestion();
   document.querySelectorAll("#steps .step").forEach((el,idx)=>{
     el.classList.toggle("active", idx === i);
   });
@@ -591,7 +545,6 @@ function onChange(qid, type){
 function onSelectChange(qid){
   state[qid] = document.getElementById(qid).value;
   clearError(qid);
-  if(qid === "a_pays") refreshBudgetQuestion();
 }
 function onOtherInput(qid){ state[qid+"_other"] = document.getElementById(qid+"_other").value; }
 function onTextInput(qid){ state[qid] = document.getElementById(qid).value; clearError(qid); }
