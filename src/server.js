@@ -152,7 +152,13 @@ app.post('/compose', async (req, res) => {
 
 const N8N_BASE = process.env.N8N_BASE || 'https://n8n.le-shabba.fr';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+// INTERNAL_SECRET protège les webhooks n8n eux-mêmes (secret propre à n8n,
+// jamais celui de pandore-api — les deux sont distincts malgré le nom de
+// variable historique). GO_INTERNAL_SECRET protège /admin/* côté Go : ne
+// jamais fusionner les deux, un bug réel de cette bascule (étape 8) est
+// parti d'une confusion entre ces deux secrets.
 const INTERNAL_SECRET = process.env.PANDORE_INTERNAL_SECRET;
+const GO_INTERNAL_SECRET = process.env.PANDORE_GO_INTERNAL_SECRET;
 
 // PANDORE_API_BASE — adresse interne de pandore-api (Go), atteinte via la
 // gateway du réseau Docker Coolify (le process tourne sur l'hôte, hors
@@ -297,7 +303,7 @@ app.get('/api/admin/audits', async (req, res) => {
     const [n8nResult, goResult] = await Promise.all([
       n8nWebhook('pandore-admin-audits', { method: 'GET', headers: { 'x-internal-secret': INTERNAL_SECRET } })
         .catch(err => { console.error('admin audits (n8n):', err); return { status: 200, data: [] }; }),
-      fetch(`${PANDORE_API_BASE}/admin/audits`, { headers: { 'x-internal-secret': INTERNAL_SECRET } })
+      fetch(`${PANDORE_API_BASE}/admin/audits`, { headers: { 'x-internal-secret': GO_INTERNAL_SECRET } })
         .then(async r => ({ status: r.status, data: await r.json() }))
         .catch(err => { console.error('admin audits (go):', err); return { status: 200, data: [] }; }),
     ]);
