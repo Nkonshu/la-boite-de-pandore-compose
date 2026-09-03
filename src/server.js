@@ -444,6 +444,174 @@ app.post('/api/admin/status', async (req, res) => {
   }
 });
 
+// --- Platform Engine V1 — connexion de comptes Meta (docs/08_PLATFORM_ENGINE.md,
+// repo pandore) : Go reste le seul détenteur du secret Meta et de la
+// logique d'échange (voir internal/platform/meta, internal/httpapi/admin_platform.go)
+// — compose ne fait que déclencher la redirection OAuth et relayer le
+// `code` reçu, jamais un appel Graph API direct.
+
+const META_APP_ID = process.env.META_APP_ID;
+const META_REDIRECT_URI = process.env.META_REDIRECT_URI;
+const META_OAUTH_SCOPES = ['pages_show_list', 'pages_read_engagement', 'instagram_basic'].join(',');
+
+// metaOAuthStates — liaison CSRF state -> tenant_id pour la danse OAuth en
+// cours. En mémoire seulement (process unique, pas de cluster ici) : rien
+// de sensible n'y est stocké, juste quel admin a initié quelle connexion,
+// avec un TTL court (la danse OAuth se termine en quelques minutes ou pas
+// du tout).
+const metaOAuthStates = new Map();
+const META_OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
+
+function pruneMetaOAuthStates() {
+  const now = Date.now();
+  for (const [state, entry] of metaOAuthStates) {
+    if (entry.expiresAt < now) metaOAuthStates.delete(state);
+  }
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function oauthResultPage(success, message, connectedNames = [], tenantId = '') {
+  const title = success ? 'Connexion réussie' : 'Connexion échouée';
+  const body = success
+    ? `<p>Compte(s) connecté(s) :</p><ul>${connectedNames.map((n) => `<li>${escapeHtml(n)}</li>`).join('')}</ul>`
+    : `<p>${escapeHtml(message || 'Erreur inconnue.')}</p>`;
+  const backHref = tenantId ? `/admin/social-accounts.html?tenant_id=${encodeURIComponent(tenantId)}` : '/admin/social-accounts.html';
+  return `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>${title}</title>
+<style>body{font-family:system-ui,sans-serif;max-width:32rem;margin:4rem auto;padding:0 1rem;color:#1a1a1a}
+h1{font-size:1.25rem}a{color:#2563eb}</style></head>
+<body><h1>${title}</h1>${body}<p><a href="${backHref}">Retour à l'admin</a></p></body></html>`;
+}
+
+// GET /api/admin/social-accounts/meta/authorize-url — appelé en fetch (avec
+// x-admin-password) depuis social-accounts.html, qui navigue ensuite le
+// navigateur vers l'URL renvoyée. Une redirection directe depuis un
+// handler admin-protégé ne fonctionnerait pas : la navigation qui suit ne
+// porte aucun header custom.
+app.get('/api/admin/social-accounts/meta/authorize-url', (req, res) => {
+  if (!checkAdmin(req, res)) return;
+  if (!META_APP_ID || !META_REDIRECT_URI) {
+    return res.status(503).json({ error: 'Intégration Meta non configurée côté compose (META_APP_ID/META_REDIRECT_URI)' });
+  }
+  const tenantId = req.query.tenant_id;
+  if (!tenantId) return res.status(400).json({ error: 'tenant_id requis' });
+
+  pruneMetaOAuthStates();
+  const state = crypto.randomUUID();
+  metaOAuthStates.set(state, {
+    tenantId,
+    connectedBy: req.query.connected_by || '',
+    expiresAt: Date.now() + META_OAUTH_STATE_TTL_MS,
+  });
+
+  const params = new URLSearchParams({
+    client_id: META_APP_ID,
+    redirect_uri: META_REDIRECT_URI,
+    state,
+    scope: META_OAUTH_SCOPES,
+    response_type: 'code',
+  });
+  res.json({ url: `https://www.facebook.com/v21.0/dialog/oauth?${params}` });
+});
+
+// GET /oauth/meta/callback — cible réelle de META_REDIRECT_URI, atteinte
+// par une redirection navigateur depuis Meta (jamais par fetch) : pas de
+// x-admin-password possible sur cette requête. La preuve d'autorisation
+// est le `code` OAuth lui-même (usage unique, expire vite, lié à cette app
+// + ce redirect_uri) combiné au `state` vérifié contre metaOAuthStates —
+// pas un mot de passe admin.
+app.get('/oauth/meta/callback', async (req, res) => {
+  const { code, state, error, error_description: errorDescription } = req.query;
+  res.set('Content-Type', 'text/html; charset=utf-8');
+
+  if (error) {
+    return res.status(400).send(oauthResultPage(false, errorDescription || error));
+  }
+
+  pruneMetaOAuthStates();
+  const pending = state && metaOAuthStates.get(state);
+  if (!pending) {
+    return res.status(400).send(oauthResultPage(false, "Session de connexion expirée ou invalide — recommencez depuis l'admin."));
+  }
+  metaOAuthStates.delete(state);
+
+  if (!code) {
+    return res.status(400).send(oauthResultPage(false, "Code d'autorisation manquant."));
+  }
+
+  try {
+    const goRes = await fetch(`${PANDORE_API_BASE}/admin/social-accounts/oauth-callback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-internal-secret': GO_INTERNAL_SECRET },
+      body: JSON.stringify({ tenant_id: pending.tenantId, code, connected_by: pending.connectedBy }),
+    });
+    const data = await goRes.json();
+    if (!goRes.ok) {
+      const message = (data && data.error && data.error.message) || `Échec côté serveur (${goRes.status})`;
+      return res.status(goRes.status).send(oauthResultPage(false, message, [], pending.tenantId));
+    }
+    const names = Array.isArray(data) ? data.map((a) => `${a.Platform} · ${a.DisplayName}`) : [];
+    return res.send(oauthResultPage(true, null, names, pending.tenantId));
+  } catch (err) {
+    console.error('oauth meta callback:', err);
+    return res.status(502).send(oauthResultPage(false, 'Le serveur Pandore est injoignable pour le moment.', [], pending.tenantId));
+  }
+});
+
+// toAdminSocialAccountView traduit un core.SocialAccount (Go, PascalCase,
+// pas de tags JSON) vers le snake_case attendu par social-accounts.html —
+// même règle que toAdminAuditView plus haut.
+function toAdminSocialAccountView(a) {
+  return {
+    id: a.ID,
+    tenant_id: a.TenantID,
+    platform: a.Platform,
+    external_account_id: a.ExternalAccountID,
+    display_name: a.DisplayName,
+    granted_scopes: a.GrantedScopes || [],
+    status: a.Status,
+    token_expires_at: a.TokenExpiresAt,
+    connected_at: a.ConnectedAt,
+    connected_by: a.ConnectedBy,
+    revoked_at: a.RevokedAt,
+  };
+}
+
+app.get('/api/admin/social-accounts', async (req, res) => {
+  if (!checkAdmin(req, res)) return;
+  const tenantId = req.query.tenant_id;
+  if (!tenantId) return res.status(400).json({ error: 'tenant_id requis' });
+  try {
+    const goRes = await fetch(`${PANDORE_API_BASE}/admin/social-accounts?tenant_id=${encodeURIComponent(tenantId)}`, {
+      headers: { 'x-internal-secret': GO_INTERNAL_SECRET },
+    });
+    const data = await goRes.json();
+    if (!goRes.ok) return res.status(goRes.status).json(data);
+    res.json(Array.isArray(data) ? data.map(toAdminSocialAccountView) : []);
+  } catch (err) {
+    console.error('admin social-accounts (list):', err);
+    res.status(502).json({ error: 'Lecture impossible' });
+  }
+});
+
+app.post('/api/admin/social-accounts/:id/revoke', async (req, res) => {
+  if (!checkAdmin(req, res)) return;
+  try {
+    const goRes = await fetch(`${PANDORE_API_BASE}/admin/social-accounts/${encodeURIComponent(req.params.id)}/revoke`, {
+      method: 'POST',
+      headers: { 'x-internal-secret': GO_INTERNAL_SECRET },
+    });
+    const data = await goRes.json();
+    if (!goRes.ok) return res.status(goRes.status).json(data);
+    res.json(toAdminSocialAccountView(data));
+  } catch (err) {
+    console.error('admin social-accounts (revoke):', err);
+    res.status(502).json({ error: 'Révocation impossible' });
+  }
+});
+
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
 const PORT = process.env.PORT || 3400;

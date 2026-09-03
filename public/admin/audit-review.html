@@ -308,7 +308,7 @@ function renderDraft(d, submissionName){
       <input type="text" id="tenantName" value="${esc(submissionName)}">
       <button class="btn btn-sm" id="btnConfirmApprove">Confirmer l'approbation</button>
     </div>
-  ` : `<div class="section"><h3>Statut</h3><p style="font-size:14px;">Approuvé le ${esc(fmtDate(d.approved_at))} par ${esc(d.approved_by)}. Client actif — tenant_id : <code>${esc(d.tenant_id)}</code></p></div>`;
+  ` : `<div class="section"><h3>Statut</h3><p style="font-size:14px;">Approuvé le ${esc(fmtDate(d.approved_at))} par ${esc(d.approved_by)}. Client actif — tenant_id : <code>${esc(d.tenant_id)}</code></p><p style="font-size:14px;"><a href="/admin/social-accounts.html?tenant_id=${encodeURIComponent(d.tenant_id)}">Gérer les comptes sociaux →</a></p></div>`;
 
   return `
     <div class="section">
