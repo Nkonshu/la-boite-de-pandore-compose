@@ -216,10 +216,14 @@ app.post('/api/audit', async (req, res) => {
       });
       return res.status(status).json(data);
     }
-    // Idempotency-Key dérivée du contenu (jamais aléatoire) : un vrai
-    // retry du même formulaire (réseau, double-clic) redonne la même clé
-    // et rejoue la même soumission côté Go plutôt que d'en créer deux.
-    const idempotencyKey = crypto.createHash('sha256').update(JSON.stringify({ email, answers })).digest('hex');
+    // Idempotency-Key : transmise telle quelle depuis le client (une seule
+    // par tentative de soumission, voir public/audit/index.html) — c'est
+    // elle qui doit faire autorité (technical/API.md, "clé générée côté
+    // client"). Un hash du contenu ne sert qu'en repli défensif si jamais
+    // absente, jamais comme mécanisme principal (un hash seul ne distingue
+    // pas deux soumissions légitimes aux réponses identiques).
+    const idempotencyKey = req.get('Idempotency-Key')
+      || crypto.createHash('sha256').update(JSON.stringify({ email, answers })).digest('hex');
     const goRes = await fetch(`${PANDORE_API_BASE}/public/audits`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Idempotency-Key': idempotencyKey },

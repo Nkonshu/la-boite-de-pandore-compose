@@ -618,6 +618,12 @@ function finishAudit(){
   window.scrollTo({top:0});
 }
 
+// Générée une seule fois par tentative de soumission (jamais recréée sur
+// un retry) : un double-clic ou un échec réseau suivi d'un nouvel essai
+// renvoie la même clé, pour que le backend (Idempotency-Key,
+// technical/API.md) rejoue la même soumission plutôt que d'en créer deux.
+let submissionIdempotencyKey = null;
+
 async function submitAudit(){
   const btn = document.getElementById("submitBtn");
   const status = document.getElementById("statusMsg");
@@ -625,10 +631,14 @@ async function submitAudit(){
   btn.disabled = true;
   btn.textContent = "Envoi en cours...";
 
+  if(!submissionIdempotencyKey){
+    submissionIdempotencyKey = (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`);
+  }
+
   try{
     const res = await fetch("/api/audit", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "Idempotency-Key": submissionIdempotencyKey },
       body: JSON.stringify({
         name: state.a0 || "",
         email: state.a0b || "",
