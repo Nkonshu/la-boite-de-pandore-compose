@@ -1,0 +1,427 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Revue d'audit — Admin — La Boîte de Pandore</title>
+<meta name="robots" content="noindex">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg?v=2">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0B0D10;
+    --surface: #14171C;
+    --surface-raised: #1C2027;
+    --accent: #E8A33D;
+    --good: #3DBD8C;
+    --bad: #E2685A;
+    --text: #F3F1EC;
+    --mute: #8B909A;
+    --mute-dim: #5B616B;
+    --border: #262B33;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'IBM Plex Sans', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1, h2, h3 { font-family: 'Instrument Sans', 'IBM Plex Sans', sans-serif; margin: 0; }
+  a { color: var(--accent); }
+
+  .gate { min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+  .gate-box { width: 100%; max-width: 360px; padding: 24px; }
+  .gate-box h1 { font-size: 22px; margin-bottom: 20px; }
+  .gate-box input {
+    width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 13px 14px; color: var(--text); font-family: inherit; font-size: 15px; margin-bottom: 14px;
+  }
+  .gate-box input:focus { outline: none; border-color: var(--accent); }
+  .gate-box .err { color: var(--bad); font-size: 13px; margin-bottom: 12px; display: none; }
+  .gate-box .err.show { display: block; }
+
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    background: var(--accent); color: #201404; font-weight: 700; font-size: 14px;
+    padding: 11px 22px; border-radius: 999px; border: none; cursor: pointer;
+  }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--text); font-weight: 600; }
+  .btn-bad { background: var(--bad); color: #2a0d09; }
+  .btn-sm { padding: 8px 16px; font-size: 13px; }
+
+  #app { display: none; }
+  #app.show { display: block; }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 40px 24px 100px; }
+  .back { font-size: 13px; color: var(--mute); text-decoration: none; display: inline-block; margin-bottom: 20px; }
+  .back:hover { color: var(--accent); }
+
+  .header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 28px; flex-wrap: wrap; }
+  .header h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.01em; margin-bottom: 4px; }
+  .header .meta { font-size: 13.5px; color: var(--mute); }
+  .status-pill {
+    display: inline-block; font-family: 'IBM Plex Mono', monospace; font-size: 11px; font-weight: 700;
+    padding: 5px 12px; border-radius: 999px; text-transform: uppercase; letter-spacing: 0.05em;
+  }
+  .status-pill.received, .status-pill.processing { background: rgba(232,163,61,0.14); color: var(--accent); }
+  .status-pill.analyzed { background: rgba(61,189,140,0.14); color: var(--good); }
+  .status-pill.needs_information, .status-pill.failed { background: rgba(226,104,90,0.14); color: var(--bad); }
+  .status-pill.rejected { background: rgba(139,144,154,0.14); color: var(--mute); }
+  .status-pill.v1 { background: rgba(61,189,140,0.2); color: var(--good); }
+  .status-pill.draft { background: rgba(232,163,61,0.14); color: var(--accent); }
+
+  .section { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 22px 24px; margin-bottom: 16px; }
+  .section h3 {
+    font-family: 'IBM Plex Mono', monospace; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--accent); margin-bottom: 14px;
+  }
+  .kv { display: grid; grid-template-columns: 160px 1fr; gap: 8px 16px; font-size: 14px; }
+  .kv dt { color: var(--mute); }
+  .kv dd { margin: 0; }
+  .tags { display: flex; flex-wrap: wrap; gap: 6px; }
+  .tag { background: var(--surface-raised); border: 1px solid var(--border); border-radius: 999px; padding: 4px 11px; font-size: 12.5px; }
+
+  .score-row { display: flex; align-items: baseline; gap: 14px; margin-bottom: 18px; }
+  .score-big { font-family: 'Instrument Sans'; font-size: 44px; font-weight: 700; }
+  .score-big .of100 { font-size: 18px; color: var(--mute); font-weight: 500; }
+  .dim { padding: 12px 0; border-top: 1px dashed var(--border); }
+  .dim:first-child { border-top: none; padding-top: 0; }
+  .dim-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .dim-name { font-weight: 600; font-size: 13.5px; }
+  .dim-score { font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: var(--mute); }
+  .bar { height: 5px; background: var(--surface-raised); border-radius: 3px; overflow: hidden; margin-bottom: 10px; }
+  .bar-fill { height: 100%; background: var(--accent); }
+  .factor { font-size: 13px; padding: 6px 0; display: flex; gap: 8px; }
+  .factor .impact { font-family: 'IBM Plex Mono', monospace; font-size: 11px; font-weight: 700; flex-shrink: 0; width: 20px; }
+  .factor.positive .impact { color: var(--good); }
+  .factor.negative .impact { color: var(--bad); }
+  .factor .detail { color: var(--mute); }
+  .missing { font-size: 12.5px; color: var(--mute-dim); font-style: italic; margin-top: 6px; }
+
+  .flag { border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; border: 1px solid var(--border); }
+  .flag.critical { border-color: rgba(226,104,90,0.4); background: rgba(226,104,90,0.08); }
+  .flag.warning { border-color: rgba(232,163,61,0.35); background: rgba(232,163,61,0.06); }
+  .flag-head { display: flex; justify-content: space-between; font-size: 12px; font-family: 'IBM Plex Mono', monospace; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px; }
+  .flag.critical .flag-head { color: var(--bad); }
+  .flag.warning .flag-head { color: var(--accent); }
+  .flag-reason { font-size: 13.5px; }
+
+  .qr { padding: 9px 0; font-size: 13.5px; border-top: 1px dashed var(--border); }
+  .qr:first-child { border-top: none; }
+  .qr .q { color: var(--mute); margin-bottom: 2px; }
+
+  .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
+  .approve-form { display: none; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
+  .approve-form.show { display: block; }
+  .approve-form input {
+    width: 100%; background: var(--surface-raised); border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px 12px; color: var(--text); font-family: inherit; font-size: 14px; margin-bottom: 10px;
+  }
+  .approve-form input:focus { outline: none; border-color: var(--accent); }
+  .approve-form label { font-size: 12.5px; color: var(--mute); display: block; margin-bottom: 6px; }
+
+  .state { text-align: center; padding: 100px 24px; color: var(--mute); }
+  .state.error { color: var(--bad); }
+  .msg { font-size: 13px; margin-top: 12px; padding: 10px 14px; border-radius: 8px; display: none; }
+  .msg.show { display: block; }
+  .msg.ok { background: rgba(61,189,140,0.12); color: var(--good); }
+  .msg.err { background: rgba(226,104,90,0.12); color: var(--bad); }
+</style>
+</head>
+<body>
+
+<div class="gate" id="gate">
+  <div class="gate-box">
+    <h1>Administration — La Boîte de Pandore</h1>
+    <input type="password" id="pwInput" placeholder="Mot de passe" autocomplete="current-password">
+    <div class="err" id="gateErr">Mot de passe incorrect.</div>
+    <button class="btn" id="loginBtn" style="width:100%">Se connecter</button>
+  </div>
+</div>
+
+<div id="app">
+  <div class="wrap" id="content">
+    <div class="state" id="loading">Chargement...</div>
+  </div>
+</div>
+
+<script>
+const PW_KEY = 'pandore_admin_pw';
+
+function esc(s){
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function fmtDate(iso){
+  if(!iso) return '';
+  return new Date(iso).toLocaleString('fr-FR', { dateStyle: 'long', timeStyle: 'short' });
+}
+
+async function api(path, opts = {}){
+  const pw = localStorage.getItem(PW_KEY) || '';
+  const res = await fetch(path, { ...opts, headers: { ...(opts.headers || {}), 'x-admin-password': pw } });
+  if(res.status === 401){
+    localStorage.removeItem(PW_KEY);
+    showGate(true);
+    throw new Error('unauthorized');
+  }
+  return res;
+}
+
+function showGate(withError){
+  document.getElementById('gate').style.display = 'flex';
+  document.getElementById('app').classList.remove('show');
+  document.getElementById('gateErr').classList.toggle('show', !!withError);
+}
+function showApp(){
+  document.getElementById('gate').style.display = 'none';
+  document.getElementById('app').classList.add('show');
+}
+
+document.getElementById('loginBtn').addEventListener('click', tryLogin);
+document.getElementById('pwInput').addEventListener('keydown', (e) => { if(e.key === 'Enter') tryLogin(); });
+
+async function tryLogin(){
+  const pw = document.getElementById('pwInput').value;
+  localStorage.setItem(PW_KEY, pw);
+  try{
+    await api('/api/admin/contacts');
+    showApp();
+    load();
+  }catch(err){
+    showGate(true);
+  }
+}
+
+const STATUS_LABELS = {
+  RECEIVED: 'reçu', PROCESSING: 'analyse en cours', NEEDS_INFORMATION: 'infos manquantes',
+  ANALYZED: 'analysé', FAILED: 'échec analyse', REJECTED: 'rejeté',
+};
+const DIMENSION_LABELS = {
+  strategic_fit: 'Adéquation stratégique', automation_potential: "Potentiel d'automatisation",
+  data_availability: 'Disponibilité des données', platform_feasibility: 'Faisabilité plateforme',
+  media_complexity: 'Complexité média', measurement_readiness: 'Capacité de mesure',
+};
+
+const id = new URLSearchParams(location.search).get('id');
+let currentDetail = null;
+
+async function load(){
+  const content = document.getElementById('content');
+  if(!id){
+    content.innerHTML = '<div class="state error">Aucun identifiant d\'audit dans le lien.</div>';
+    return;
+  }
+  content.innerHTML = '<div class="state" id="loading">Chargement...</div>';
+  try{
+    const res = await api(`/api/admin/audits/${encodeURIComponent(id)}`);
+    if(res.status === 404){
+      content.innerHTML = '<div class="state error">Audit introuvable.</div>';
+      return;
+    }
+    if(!res.ok) throw new Error('load_failed');
+    currentDetail = await res.json();
+    render();
+  }catch(err){
+    content.innerHTML = '<div class="state error">Erreur de chargement — réessayez.</div>';
+  }
+}
+
+function renderAnswers(answers){
+  const entries = Object.entries(answers || {}).sort(([a],[b]) => a.localeCompare(b));
+  if(entries.length === 0) return '<div class="qr">Aucune réponse.</div>';
+  return entries.map(([k,v]) => `<div class="qr"><div class="q">${esc(k)}</div><div>${esc(v)}</div></div>`).join('');
+}
+
+function renderFeasibility(f){
+  if(!f) return '';
+  const dims = (f.dimensions || []).map(d => {
+    const label = DIMENSION_LABELS[d.dimension] || d.dimension;
+    const factors = (d.factors || []).map(fa => `
+      <div class="factor ${fa.impact}">
+        <span class="impact">${fa.impact === 'positive' ? '+' : '-'}</span>
+        <span><b>${esc(fa.code)}</b> — <span class="detail">${esc(fa.detail)}</span></span>
+      </div>
+    `).join('');
+    const missing = (d.missing_information || []).length
+      ? `<div class="missing">Informations manquantes : ${d.missing_information.map(esc).join(', ')}</div>` : '';
+    return `
+      <div class="dim">
+        <div class="dim-head"><span class="dim-name">${esc(label)}</span><span class="dim-score">${d.score}/100</span></div>
+        <div class="bar"><div class="bar-fill" style="width:${Math.max(0,Math.min(100,d.score))}%"></div></div>
+        ${factors}
+        ${missing}
+      </div>
+    `;
+  }).join('');
+  return `
+    <div class="section">
+      <h3>Score de faisabilité — modèle ${esc(f.model_version)}</h3>
+      <div class="score-row"><div class="score-big">${f.overall}<span class="of100">/100</span></div></div>
+      ${dims}
+    </div>
+  `;
+}
+
+function renderFlags(flags){
+  if(!flags || flags.length === 0) return '';
+  const items = flags.map(fl => `
+    <div class="flag ${fl.severity}">
+      <div class="flag-head"><span>${esc(fl.field)} — ${esc(fl.type)}</span><span>${esc(fl.severity)}</span></div>
+      <div class="flag-reason">${esc(fl.reason)}</div>
+    </div>
+  `).join('');
+  return `<div class="section"><h3>Alertes de cohérence (data quality flags)</h3>${items}</div>`;
+}
+
+function renderDraft(d, submissionName){
+  if(!d){
+    return `<div class="section"><h3>Analyse</h3><p style="color:var(--mute); font-size:14px;">Pas encore de résultat d'analyse pour cet audit (statut en cours, ou échec — voir « Relancer l'analyse »).</p></div>`;
+  }
+  const proposition = d.proposition ? `
+    <div class="section">
+      <h3>Proposition</h3>
+      <dl class="kv">
+        <dt>Objectif principal</dt><dd>${esc(d.proposition.primary_objective)}</dd>
+        <dt>Plateformes</dt><dd>${(d.proposition.platforms||[]).map(esc).join(', ') || '—'}</dd>
+        <dt>Fréquence</dt><dd>${esc(d.proposition.frequency)}</dd>
+        <dt>Formats</dt><dd>${(d.proposition.formats||[]).map(esc).join(', ') || '—'}</dd>
+        <dt>Autonomie initiale</dt><dd>${esc(d.proposition.initial_autonomy)}</dd>
+        <dt>Portée de validation</dt><dd>${esc(d.proposition.validation_scope)}</dd>
+        <dt>KPI principal</dt><dd>${esc(d.proposition.primary_kpi)}</dd>
+        <dt>KPI secondaires</dt><dd>${(d.proposition.secondary_kpis||[]).map(esc).join(', ') || '—'}</dd>
+      </dl>
+    </div>
+  ` : '';
+
+  const approveForm = d.status !== 'v1' ? `
+    <div class="actions">
+      <button class="btn btn-sm" id="btnShowApprove">Approuver</button>
+      <button class="btn btn-ghost btn-sm" id="btnReject">Rejeter</button>
+      <button class="btn btn-ghost btn-sm" id="btnReprocess">Relancer l'analyse</button>
+    </div>
+    <div class="approve-form" id="approveForm">
+      <label for="tenantName">Nom du client (crée le compte à l'approbation)</label>
+      <input type="text" id="tenantName" value="${esc(submissionName)}">
+      <button class="btn btn-sm" id="btnConfirmApprove">Confirmer l'approbation</button>
+    </div>
+  ` : `<div class="section"><h3>Statut</h3><p style="font-size:14px;">Approuvé le ${esc(fmtDate(d.approved_at))} par ${esc(d.approved_by)}. Client actif — tenant_id : <code>${esc(d.tenant_id)}</code></p></div>`;
+
+  return `
+    <div class="section">
+      <h3>Compréhension (Draft ${esc(d.status)})</h3>
+      <dl class="kv">
+        <dt>Identité</dt><dd>${esc(d.identity)}</dd>
+        <dt>Audience</dt><dd>${esc(d.audience)}</dd>
+      </dl>
+      <div style="margin-top:14px;" class="tags">${(d.objectives||[]).map(o => `<span class="tag">${esc(o)}</span>`).join('')}</div>
+    </div>
+    ${proposition}
+    ${renderFeasibility(d.feasibility)}
+    ${renderFlags(d.data_quality_flags)}
+    <div class="section">
+      ${d.status !== 'v1' ? '<h3>Décision</h3>' : ''}
+      ${approveForm}
+      <div class="msg" id="actionMsg"></div>
+    </div>
+  `;
+}
+
+function render(){
+  const data = currentDetail;
+  const statusClass = data.draft ? data.draft.status.toLowerCase() : data.status.toLowerCase();
+  document.getElementById('content').innerHTML = `
+    <a class="back" href="/admin/">&larr; Retour au tableau de bord</a>
+    <div class="header">
+      <div>
+        <h1>${esc(data.name || 'Prospect')}</h1>
+        <div class="meta">${esc(data.email)} — reçu le ${esc(fmtDate(data.submitted_at))}</div>
+      </div>
+      <span class="status-pill ${statusClass}">${esc(STATUS_LABELS[data.status] || data.status)}</span>
+    </div>
+    <div class="section">
+      <h3>Réponses brutes</h3>
+      ${renderAnswers(data.raw_answers)}
+    </div>
+    ${renderDraft(data.draft, data.name)}
+  `;
+  wireActions();
+}
+
+function showMsg(text, ok){
+  const el = document.getElementById('actionMsg');
+  if(!el) return;
+  el.textContent = text;
+  el.className = `msg show ${ok ? 'ok' : 'err'}`;
+}
+
+function wireActions(){
+  const showApproveBtn = document.getElementById('btnShowApprove');
+  const rejectBtn = document.getElementById('btnReject');
+  const reprocessBtn = document.getElementById('btnReprocess');
+  const confirmBtn = document.getElementById('btnConfirmApprove');
+
+  if(showApproveBtn) showApproveBtn.addEventListener('click', () => {
+    document.getElementById('approveForm').classList.add('show');
+  });
+
+  if(confirmBtn) confirmBtn.addEventListener('click', async () => {
+    const tenantName = document.getElementById('tenantName').value.trim();
+    if(!tenantName){ showMsg('Le nom du client est requis.', false); return; }
+    confirmBtn.disabled = true;
+    try{
+      const res = await api(`/api/admin/audits/${encodeURIComponent(id)}/approve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tenant_name: tenantName }),
+      });
+      if(!res.ok){ const e = await res.json(); throw new Error(e.error?.message || e.error || 'échec'); }
+      showMsg('Approuvé — client activé.', true);
+      setTimeout(load, 900);
+    }catch(err){
+      showMsg(`Échec de l'approbation : ${err.message}`, false);
+      confirmBtn.disabled = false;
+    }
+  });
+
+  if(rejectBtn) rejectBtn.addEventListener('click', async () => {
+    if(!confirm('Rejeter cet audit ? Cette action est visible par l\'équipe.')) return;
+    rejectBtn.disabled = true;
+    try{
+      const res = await api(`/api/admin/audits/${encodeURIComponent(id)}/reject`, { method: 'POST' });
+      if(!res.ok) throw new Error('échec');
+      showMsg('Audit rejeté.', true);
+      setTimeout(load, 900);
+    }catch(err){
+      showMsg("Échec du rejet.", false);
+      rejectBtn.disabled = false;
+    }
+  });
+
+  if(reprocessBtn) reprocessBtn.addEventListener('click', async () => {
+    reprocessBtn.disabled = true;
+    try{
+      const res = await api(`/api/admin/audits/${encodeURIComponent(id)}/reprocess`, { method: 'POST' });
+      if(!res.ok) throw new Error('échec');
+      showMsg('Nouvelle analyse lancée — actualisez dans quelques secondes.', true);
+      setTimeout(load, 4000);
+    }catch(err){
+      showMsg('Échec de la relance.', false);
+      reprocessBtn.disabled = false;
+    }
+  });
+}
+
+(function init(){
+  if(localStorage.getItem(PW_KEY)){
+    api('/api/admin/contacts').then(() => { showApp(); load(); }).catch(() => showGate(false));
+  } else {
+    showGate(false);
+  }
+})();
+</script>
+</body>
+</html>

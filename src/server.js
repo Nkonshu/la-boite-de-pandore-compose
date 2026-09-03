@@ -320,6 +320,109 @@ app.get('/api/admin/audits', async (req, res) => {
   }
 });
 
+// toAdminAuditDetailView traduit {submission, draft} (Go, champs
+// PascalCase pour les deux types sans tags JSON propres — Proposition/
+// Feasibility/DataQualityFlags sont déjà en snake_case, définis avec leurs
+// propres tags) vers une forme homogène pour l'écran de revue.
+function toAdminAuditDetailView(data) {
+  const s = data.submission || {};
+  const d = data.draft || null;
+  return {
+    id: s.ID,
+    name: (s.RawAnswers || {}).a0 || '',
+    email: (s.RawAnswers || {}).a0b || '',
+    status: s.Status,
+    submitted_at: s.SubmittedAt,
+    raw_answers: s.RawAnswers || {},
+    draft: d ? {
+      id: d.ID,
+      status: d.Status,
+      identity: d.Identity,
+      audience: d.Audience,
+      objectives: d.Objectives || [],
+      platforms: d.Platforms || [],
+      constraints: d.Constraints || [],
+      forbidden_topics: d.ForbiddenTopics || [],
+      proposition: d.Proposition || null,
+      data_quality_flags: d.DataQualityFlags || [],
+      feasibility: d.Feasibility || null,
+      analysis_version: d.AnalysisVersion,
+      feasibility_model_version: d.FeasibilityModelVersion,
+      ai_model: d.AIModel,
+      created_at: d.CreatedAt,
+      approved_at: d.ApprovedAt,
+      approved_by: d.ApprovedBy,
+      tenant_id: d.TenantID,
+    } : null,
+  };
+}
+
+app.get('/api/admin/audits/:id', async (req, res) => {
+  if (!checkAdmin(req, res)) return;
+  try {
+    const goRes = await fetch(`${PANDORE_API_BASE}/admin/audits/${encodeURIComponent(req.params.id)}`, {
+      headers: { 'x-internal-secret': GO_INTERNAL_SECRET },
+    });
+    if (goRes.status === 404) return res.status(404).json({ error: 'not_found' });
+    if (!goRes.ok) throw new Error(`go_status_${goRes.status}`);
+    const data = await goRes.json();
+    res.json(toAdminAuditDetailView(data));
+  } catch (err) {
+    console.error(err);
+    res.status(502).json({ error: 'Lecture impossible' });
+  }
+});
+
+// approve/reject/reprocess — jamais déclenchés automatiquement : chaque
+// appel correspond à un clic explicite de l'admin sur l'écran de revue
+// (audit-review.html), pas à une action système.
+app.post('/api/admin/audits/:id/approve', async (req, res) => {
+  if (!checkAdmin(req, res)) return;
+  const { tenant_id, tenant_name, approved_by } = req.body || {};
+  try {
+    const goRes = await fetch(`${PANDORE_API_BASE}/admin/audits/${encodeURIComponent(req.params.id)}/approve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-internal-secret': GO_INTERNAL_SECRET },
+      body: JSON.stringify({ tenant_id: tenant_id || '', tenant_name: tenant_name || '', approved_by: approved_by || '' }),
+    });
+    const data = await goRes.json();
+    res.status(goRes.status).json(data);
+  } catch (err) {
+    console.error(err);
+    res.status(502).json({ error: 'Approbation impossible' });
+  }
+});
+
+app.post('/api/admin/audits/:id/reject', async (req, res) => {
+  if (!checkAdmin(req, res)) return;
+  try {
+    const goRes = await fetch(`${PANDORE_API_BASE}/admin/audits/${encodeURIComponent(req.params.id)}/reject`, {
+      method: 'POST',
+      headers: { 'x-internal-secret': GO_INTERNAL_SECRET },
+    });
+    const data = await goRes.json();
+    res.status(goRes.status).json(data);
+  } catch (err) {
+    console.error(err);
+    res.status(502).json({ error: 'Rejet impossible' });
+  }
+});
+
+app.post('/api/admin/audits/:id/reprocess', async (req, res) => {
+  if (!checkAdmin(req, res)) return;
+  try {
+    const goRes = await fetch(`${PANDORE_API_BASE}/admin/audits/${encodeURIComponent(req.params.id)}/reprocess`, {
+      method: 'POST',
+      headers: { 'x-internal-secret': GO_INTERNAL_SECRET },
+    });
+    const data = await goRes.json();
+    res.status(goRes.status).json(data);
+  } catch (err) {
+    console.error(err);
+    res.status(502).json({ error: 'Relance impossible' });
+  }
+});
+
 app.post('/api/admin/status', async (req, res) => {
   if (!checkAdmin(req, res)) return;
   const { table, id, status: newStatus } = req.body || {};
