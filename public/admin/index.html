@@ -148,6 +148,11 @@
 
     <div class="stats" id="stats"></div>
 
+    <div id="opsGapsPanel" class="panel" style="display:none;">
+      <h2>À finaliser</h2>
+      <div id="opsGapsList" style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;font-size:13.5px;color:var(--mute);"></div>
+    </div>
+
     <div class="panel">
       <h2>Messages de contact</h2>
       <div class="table-scroll">
@@ -237,6 +242,36 @@ async function refreshAll(){
     renderAudits();
   }catch(err){
     // 401 already handled inside api(); other errors: leave tables as-is
+  }
+  refreshOpsGaps();
+}
+
+// refreshOpsGaps — suivi visible de ce qu'il reste à configurer pour que
+// Pandore soit pleinement opérationnel (voir GET /admin/status côté Go).
+// Échec silencieux volontaire (panel non affiché) : cette lecture ne doit
+// jamais empêcher le reste du dashboard de fonctionner si le backend
+// Platform Engine n'est pas joignable pour une raison quelconque.
+async function refreshOpsGaps(){
+  const panel = document.getElementById('opsGapsPanel');
+  const list = document.getElementById('opsGapsList');
+  try{
+    const status = await api('/api/admin/platform-status');
+    const gaps = [];
+    const pe = status.platform_engine || {};
+    if(!pe.meta_configured){
+      gaps.push('Intégration Meta (Facebook/Instagram) non configurée — META_APP_ID/META_APP_SECRET manquants ou invalides côté VPS (.env.remote).');
+    }
+    if(!pe.token_encryption_configured){
+      gaps.push('Clé de chiffrement des tokens absente — PANDORE_TOKEN_ENCRYPTION_KEY manquante côté VPS (.env.remote), la connexion de comptes restera refusée tant qu\'elle ne l\'est pas.');
+    }
+    if(gaps.length === 0){
+      panel.style.display = 'none';
+      return;
+    }
+    list.innerHTML = gaps.map(g => `<div style="margin-bottom:6px;">⚠️ ${esc(g)}</div>`).join('');
+    panel.style.display = 'block';
+  }catch(err){
+    panel.style.display = 'none';
   }
 }
 

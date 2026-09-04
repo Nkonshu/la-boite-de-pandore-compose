@@ -612,6 +612,26 @@ app.post('/api/admin/social-accounts/:id/revoke', async (req, res) => {
   }
 });
 
+// GET /api/admin/platform-status — proxy vers GET /admin/status (Go) :
+// état de préparation opérationnelle (Meta configuré ou non, clé de
+// chiffrement présente ou non), affiché en bandeau dans le dashboard admin
+// (public/admin/index.html) pour un suivi visible plutôt qu'à retrouver
+// dans les logs du VPS.
+app.get('/api/admin/platform-status', async (req, res) => {
+  if (!checkAdmin(req, res)) return;
+  try {
+    const goRes = await fetch(`${PANDORE_API_BASE}/admin/status`, {
+      headers: { 'x-internal-secret': GO_INTERNAL_SECRET },
+    });
+    const data = await goRes.json();
+    if (!goRes.ok) return res.status(goRes.status).json(data);
+    res.json(data);
+  } catch (err) {
+    console.error('admin platform-status:', err);
+    res.status(502).json({ error: 'Lecture impossible' });
+  }
+});
+
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
 const PORT = process.env.PORT || 3400;
