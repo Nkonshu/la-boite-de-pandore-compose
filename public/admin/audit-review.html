@@ -144,6 +144,9 @@
 </div>
 
 <div id="app">
+  <div class="wrap" style="padding-bottom:0;">
+    <div id="pandoreSessionBar" style="margin:16px 0;padding:10px 14px;background:var(--surface,#14171C);border:1px solid var(--border,#262B33);border-radius:10px;font-size:13px;"></div>
+  </div>
   <div class="wrap" id="content">
     <div class="state" id="loading">Chargement...</div>
   </div>
@@ -151,6 +154,84 @@
 
 <script>
 const PW_KEY = 'pandore_admin_pw';
+
+// F0.2 — pont d'identité humaine. ADMIN_PASSWORD (PW_KEY, localStorage)
+// reste la porte d'accès à cette page ; PANDORE_SESSION_KEY est une
+// identité Pandore distincte et réelle (User/Session/Role/Permission),
+// seule source d'autorisation pour approuver. sessionStorage plutôt que
+// localStorage : ce Bearer ne doit pas survivre à la fermeture de
+// l'onglet (réduit la fenêtre d'exposition pour une action aussi
+// sensible qu'approuver un client) — le mot de passe Pandore lui-même
+// n'est jamais stocké, seulement le résultat du login.
+const PANDORE_SESSION_KEY = 'pandore_session';
+
+function getPandoreSession(){
+  try{ return JSON.parse(sessionStorage.getItem(PANDORE_SESSION_KEY) || 'null'); }
+  catch{ return null; }
+}
+function setPandoreSession(session){
+  sessionStorage.setItem(PANDORE_SESSION_KEY, JSON.stringify(session));
+}
+function clearPandoreSession(){
+  sessionStorage.removeItem(PANDORE_SESSION_KEY);
+}
+
+function renderSessionBar(){
+  const bar = document.getElementById('pandoreSessionBar');
+  if(!bar) return;
+  const session = getPandoreSession();
+  if(session && session.token){
+    bar.innerHTML = `
+      Connecté en tant que : <b>${esc(session.user.email)}</b> (${esc(session.user.role)})
+      <button class="btn btn-ghost btn-sm" id="pandoreLogoutBtn" style="margin-left:10px;">Déconnexion</button>
+    `;
+    document.getElementById('pandoreLogoutBtn').addEventListener('click', pandoreLogout);
+  } else {
+    bar.innerHTML = `
+      <div style="margin-bottom:6px;color:var(--mute,#8B909A);">Session Pandore requise pour approuver un audit (identité distincte du mot de passe d'accès à cette page).</div>
+      <input type="email" id="pandoreEmail" placeholder="email Pandore" style="margin-right:6px;">
+      <input type="password" id="pandorePassword" placeholder="mot de passe" style="margin-right:6px;">
+      <button class="btn btn-sm" id="pandoreLoginBtn">Connexion Pandore</button>
+      <div class="err show" id="pandoreLoginErr" style="display:none;margin-top:6px;"></div>
+    `;
+    document.getElementById('pandoreLoginBtn').addEventListener('click', pandoreLogin);
+  }
+}
+
+async function pandoreLogin(){
+  const email = document.getElementById('pandoreEmail').value.trim();
+  const password = document.getElementById('pandorePassword').value;
+  const errEl = document.getElementById('pandoreLoginErr');
+  errEl.style.display = 'none';
+  try{
+    const res = await api('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    const data = await res.json();
+    if(!res.ok){
+      errEl.textContent = (data.error && data.error.message) || 'Connexion Pandore refusée.';
+      errEl.style.display = 'block';
+      return;
+    }
+    setPandoreSession({ token: data.token, user: data.user });
+    renderSessionBar();
+  }catch(err){
+    errEl.textContent = 'Connexion Pandore impossible.';
+    errEl.style.display = 'block';
+  }
+}
+
+async function pandoreLogout(){
+  const session = getPandoreSession();
+  clearPandoreSession();
+  renderSessionBar();
+  if(session && session.token){
+    try{ await api('/api/auth/logout', { method: 'POST', headers: { Authorization: `Bearer ${session.token}` } }); }
+    catch{ /* déconnexion locale déjà faite, un échec réseau ici n'est pas bloquant */ }
+  }
+}
 
 function esc(s){
   return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -179,6 +260,7 @@ function showGate(withError){
 function showApp(){
   document.getElementById('gate').style.display = 'none';
   document.getElementById('app').classList.add('show');
+  renderSessionBar();
 }
 
 document.getElementById('loginBtn').addEventListener('click', tryLogin);
@@ -371,13 +453,26 @@ function wireActions(){
   if(confirmBtn) confirmBtn.addEventListener('click', async () => {
     const tenantName = document.getElementById('tenantName').value.trim();
     if(!tenantName){ showMsg('Le nom du client est requis.', false); return; }
+    const session = getPandoreSession();
+    if(!session || !session.token){
+      showMsg('Connectez-vous avec votre identité Pandore ci-dessus avant d\'approuver.', false);
+      return;
+    }
     confirmBtn.disabled = true;
     try{
       const res = await api(`/api/admin/audits/${encodeURIComponent(id)}/approve`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.token}` },
         body: JSON.stringify({ tenant_name: tenantName }),
       });
+      if(res.status === 401){
+        // Session Pandore expirée/révoquée — jamais de reconnexion
+        // automatique avec des identifiants mémorisés (docs métier F0.2
+        // §11) : l'humain doit se reconnecter explicitement.
+        clearPandoreSession();
+        renderSessionBar();
+        throw new Error('session Pandore expirée — reconnectez-vous ci-dessus et réessayez');
+      }
       if(!res.ok){ const e = await res.json(); throw new Error(e.error?.message || e.error || 'échec'); }
       showMsg('Approuvé — client activé.', true);
       setTimeout(load, 900);

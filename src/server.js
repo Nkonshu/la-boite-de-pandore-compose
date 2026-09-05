@@ -171,56 +171,16 @@ const PANDORE_API_BASE = process.env.PANDORE_API_BASE || 'http://10.0.1.1:4000';
 // une fois le rollback n8n plus nécessaire.
 const AUDIT_BACKEND = process.env.AUDIT_BACKEND || 'go';
 
-// PANDORE_SERVICE_EMAIL/PASSWORD — F0 (régression corrigée) : depuis la
-// tranche C, POST /admin/audits/{id}/approve exige une vraie session
-// (requireSession + PermApproveClientBrain), plus x-internal-secret. Ce
-// n'est pas un contournement : compose se connecte comme un vrai
-// PANDORE_SUPER_ADMIN dédié (compte de service, créé une fois via
-// cmd/bootstrapadmin côté pandore), exactement le même mécanisme qu'un
-// opérateur humain — pas une Auth V2, pas une exception backend.
-const PANDORE_SERVICE_EMAIL = process.env.PANDORE_SERVICE_EMAIL;
-const PANDORE_SERVICE_PASSWORD = process.env.PANDORE_SERVICE_PASSWORD;
-
-// goSessionToken — mis en cache en mémoire process (une session dure 30
-// jours côté Go, voir internal/core/session.go) : pas besoin de se
-// reconnecter à chaque appel. goSessionFetch réessaie une fois avec une
-// session fraîche sur un 401 (session révoquée/expirée), jamais plus —
-// un deuxième 401 remonte tel quel, il ne doit jamais y avoir de boucle.
-let goSessionToken = null;
-
-async function getGoSessionToken(forceRefresh = false) {
-  if (goSessionToken && !forceRefresh) return goSessionToken;
-  if (!PANDORE_SERVICE_EMAIL || !PANDORE_SERVICE_PASSWORD) {
-    throw new Error('PANDORE_SERVICE_EMAIL/PANDORE_SERVICE_PASSWORD absents — impossible de créer une session Go');
-  }
-  const res = await fetch(`${PANDORE_API_BASE}/auth/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: PANDORE_SERVICE_EMAIL, password: PANDORE_SERVICE_PASSWORD }),
-  });
-  if (!res.ok) throw new Error(`login compte de service Go échoué: HTTP ${res.status}`);
-  const data = await res.json();
-  goSessionToken = data.token;
-  return goSessionToken;
-}
-
-// goSessionFetch — pour les routes migrées vers requireSession (approve,
-// et toute future route de ce type) — jamais x-internal-secret sur celles-ci.
-async function goSessionFetch(path, opts = {}) {
-  const token = await getGoSessionToken();
-  let res = await fetch(`${PANDORE_API_BASE}${path}`, {
-    ...opts,
-    headers: { ...(opts.headers || {}), Authorization: `Bearer ${token}` },
-  });
-  if (res.status === 401) {
-    const freshToken = await getGoSessionToken(true);
-    res = await fetch(`${PANDORE_API_BASE}${path}`, {
-      ...opts,
-      headers: { ...(opts.headers || {}), Authorization: `Bearer ${freshToken}` },
-    });
-  }
-  return res;
-}
+// F0.2 — pont d'identité humaine (remplace le compte de service F0,
+// rejeté en revue : un service account substituait l'identité de
+// n'importe quel humain cliquant "Approuver", cassant l'auditabilité
+// exigée par la tranche C). Compose ne crée ni ne détient plus aucune
+// session Go lui-même — il relaie tel quel le Bearer que le navigateur
+// obtient en se connectant comme un vrai Pandore User (POST /auth/login,
+// déjà existant, aucune Auth V2). ADMIN_PASSWORD reste la porte d'accès à
+// l'UI legacy (inchangée) ; le Bearer Pandore est la seule source
+// d'autorisation pour approveAudit — coexistence transitoire assumée
+// (voir docs/11_SECURITY.md, repo pandore).
 
 async function n8nWebhook(pathAndQuery, opts = {}) {
   const res = await fetch(`${N8N_BASE}/webhook/${pathAndQuery}`, opts);
@@ -430,13 +390,23 @@ app.get('/api/admin/audits/:id', async (req, res) => {
 // F0 : approved_by n'est plus envoyé — Go l'ignore depuis la tranche C
 // (il dérive systématiquement l'identité de la session), le renvoyer
 // laisserait croire à tort qu'il compte encore.
+// F0.2 : la vraie autorisation vient exclusivement du Bearer Pandore
+// relayé tel quel — ADMIN_PASSWORD (checkAdmin) reste une porte d'accès à
+// l'UI legacy, jamais suffisante seule pour approuver (docs métier F0.2
+// §6/§10). Aucune identité de substitution : le header Authorization
+// reçu du navigateur est transmis sans modification, jamais recréé ni
+// remplacé par une session compose.
 app.post('/api/admin/audits/:id/approve', async (req, res) => {
   if (!checkAdmin(req, res)) return;
+  const authorization = req.get('Authorization');
+  if (!authorization) {
+    return res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'session Pandore requise pour approuver' } });
+  }
   const { tenant_id, tenant_name } = req.body || {};
   try {
-    const goRes = await goSessionFetch(`/admin/audits/${encodeURIComponent(req.params.id)}/approve`, {
+    const goRes = await fetch(`${PANDORE_API_BASE}/admin/audits/${encodeURIComponent(req.params.id)}/approve`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', Authorization: authorization },
       body: JSON.stringify({ tenant_id: tenant_id || '', tenant_name: tenant_name || '' }),
     });
     const data = await goRes.json();
@@ -444,6 +414,45 @@ app.post('/api/admin/audits/:id/approve', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(502).json({ error: 'Approbation impossible' });
+  }
+});
+
+// F0.2 — proxy minimal vers l'auth Pandore existante (aucune Auth V2).
+// pandore-api n'est jamais exposé directement (docs infra) ; ADMIN_PASSWORD
+// reste la porte d'entrée à l'UI legacy avant même de pouvoir tenter un
+// login Pandore. Ni le mot de passe ni le Bearer ne sont jamais logués.
+app.post('/api/auth/login', async (req, res) => {
+  if (!checkAdmin(req, res)) return;
+  const { email, password } = req.body || {};
+  if (!email || !password) return res.status(400).json({ error: 'email et password requis' });
+  try {
+    const goRes = await fetch(`${PANDORE_API_BASE}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    const data = await goRes.json();
+    res.status(goRes.status).json(data);
+  } catch (err) {
+    console.error('auth login proxy:', err.message);
+    res.status(502).json({ error: 'Connexion impossible' });
+  }
+});
+
+app.post('/api/auth/logout', async (req, res) => {
+  if (!checkAdmin(req, res)) return;
+  const authorization = req.get('Authorization');
+  if (!authorization) return res.json({ status: 'ok' });
+  try {
+    const goRes = await fetch(`${PANDORE_API_BASE}/auth/logout`, {
+      method: 'POST',
+      headers: { Authorization: authorization },
+    });
+    const data = await goRes.json().catch(() => ({}));
+    res.status(goRes.status).json(data);
+  } catch (err) {
+    console.error('auth logout proxy:', err.message);
+    res.status(502).json({ error: 'Déconnexion impossible' });
   }
 });
 
