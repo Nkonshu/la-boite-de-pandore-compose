@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex">
+<title>Plan d'Accompagnement — La Boîte de Pandore</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg?v=2">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root { --bg:#0B0D10; --surface:#14171C; --accent:#E8A33D; --good:#3DBD8C; --bad:#E2685A; --warn:#E8C93D; --text:#F3F1EC; --mute:#8B909A; --border:#262B33; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'IBM Plex Sans', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  h1, h2 { font-family: 'Instrument Sans', sans-serif; margin: 0; }
+  .wrap { max-width: 640px; margin: 0 auto; padding: 48px 24px 90px; }
+  .eyebrow { font-size: 12px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); margin-bottom: 10px; }
+  h1 { font-size: 26px; margin-bottom: 30px; }
+  .section { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 20px 22px; margin-bottom: 14px; }
+  .section h3 { font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); margin-bottom: 10px; }
+  .section p { margin: 0; line-height: 1.6; white-space: pre-wrap; }
+  .missing { color: var(--warn); font-size: 13px; margin-top: 8px; }
+  .actions { display: flex; gap: 10px; margin-top: 28px; flex-wrap: wrap; }
+  button { font-family: inherit; font-size: 14px; font-weight: 600; padding: 12px 18px; border-radius: 10px; border: 1px solid var(--border); cursor: pointer; background: var(--surface); color: var(--text); }
+  button:hover { filter: brightness(1.15); }
+  .btn-approve { border-color: var(--good); color: var(--good); }
+  .btn-changes { border-color: var(--warn); color: var(--warn); }
+  .btn-reject { border-color: var(--bad); color: var(--bad); }
+  .decision-box { margin-top: 18px; display: none; }
+  .decision-box.open { display: block; }
+  textarea { width: 100%; min-height: 90px; background: #0F1216; color: var(--text); border: 1px solid var(--border); border-radius: 10px; padding: 12px; font-family: inherit; font-size: 14px; resize: vertical; }
+  .req { color: var(--bad); font-size: 12px; margin-top: 4px; }
+  .confirm-row { display: flex; gap: 10px; margin-top: 10px; }
+  .state { text-align: center; padding: 100px 24px; color: var(--mute); }
+  .state.error { color: var(--bad); }
+  .state.ok { color: var(--good); }
+</style>
+</head>
+<body>
+<div class="wrap" id="app"><div class="state">Chargement...</div></div>
+<script>
+function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+const token = new URLSearchParams(location.search).get('token');
+const app = document.getElementById('app');
+
+function renderPlan(p){
+  const missing = (p.missing_information || []).length
+    ? `<div class="missing">Informations manquantes : ${p.missing_information.map(esc).join(', ')}</div>` : '';
+  app.innerHTML = `
+    <div class="eyebrow">Plan d'Accompagnement — version ${p.version}</div>
+    <h1>Votre décision est attendue</h1>
+    <div class="section"><h3>Ce que nous avons compris</h3><p>${esc(p.problem_understood) || '—'}</p></div>
+    <div class="section"><h3>Audience</h3><p>${esc(p.audience) || '—'}</p></div>
+    <div class="section"><h3>Proposition</h3><p>${esc(p.proposal) || '—'}</p>${missing}</div>
+    <div class="section"><h3>Pandore s'engage à</h3><p>${esc(p.pandore_responsibilities) || '—'}</p></div>
+    <div class="section"><h3>De votre côté</h3><p>${esc(p.client_responsibilities) || '—'}</p></div>
+    <div class="section"><h3>Comment on mesure</h3><p>${esc(p.measurement_method) || '—'}</p></div>
+    ${p.known_limitations ? `<div class="section"><h3>Limites connues</h3><p>${esc(p.known_limitations)}</p></div>` : ''}
+    <div class="actions">
+      <button class="btn-approve" data-decision="APPROVED">Approuver</button>
+      <button class="btn-changes" data-decision="CHANGES_REQUESTED">Demander des modifications</button>
+      <button class="btn-reject" data-decision="REJECTED">Refuser</button>
+    </div>
+    <div class="decision-box" id="box-APPROVED">
+      <textarea id="comment-APPROVED" placeholder="Commentaire (optionnel)"></textarea>
+      <div class="confirm-row"><button class="btn-approve" id="confirm-APPROVED">Confirmer l'approbation</button></div>
+    </div>
+    <div class="decision-box" id="box-CHANGES_REQUESTED">
+      <textarea id="comment-CHANGES_REQUESTED" placeholder="Décrivez ce qui doit changer (obligatoire)"></textarea>
+      <div class="req" id="req-CHANGES_REQUESTED" style="display:none;">Un commentaire est requis pour demander des modifications.</div>
+      <div class="confirm-row"><button class="btn-changes" id="confirm-CHANGES_REQUESTED">Confirmer la demande</button></div>
+    </div>
+    <div class="decision-box" id="box-REJECTED">
+      <textarea id="comment-REJECTED" placeholder="Commentaire (optionnel)"></textarea>
+      <div class="confirm-row"><button class="btn-reject" id="confirm-REJECTED">Confirmer le refus</button></div>
+    </div>
+  `;
+  for (const btn of app.querySelectorAll('[data-decision]')){
+    btn.addEventListener('click', () => {
+      for (const box of app.querySelectorAll('.decision-box')) box.classList.remove('open');
+      document.getElementById('box-' + btn.dataset.decision).classList.add('open');
+    });
+  }
+  for (const decision of ['APPROVED','CHANGES_REQUESTED','REJECTED']){
+    document.getElementById('confirm-' + decision).addEventListener('click', () => submit(decision));
+  }
+}
+
+async function submit(decision){
+  const comment = document.getElementById('comment-' + decision).value.trim();
+  if (decision === 'CHANGES_REQUESTED' && !comment){
+    document.getElementById('req-CHANGES_REQUESTED').style.display = 'block';
+    return;
+  }
+  try{
+    const res = await fetch(`/api/public/plans/${encodeURIComponent(token)}/decision`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ decision, comment }),
+    });
+    if(res.ok){
+      app.innerHTML = '<div class="state ok">✓ Votre décision a été enregistrée. Merci, vous pouvez fermer cette page.</div>';
+      return;
+    }
+    const data = await res.json().catch(() => ({}));
+    const msg = (data.error && data.error.message) || 'Erreur lors de l\'enregistrement.';
+    app.innerHTML = `<div class="state error">${esc(msg)}</div>`;
+  }catch(err){
+    app.innerHTML = '<div class="state error">Erreur réseau — réessayez dans un instant.</div>';
+  }
+}
+
+async function load(){
+  if(!token){
+    app.innerHTML = '<div class="state error">Aucun jeton dans ce lien.</div>';
+    return;
+  }
+  try{
+    const res = await fetch(`/api/public/plans/${encodeURIComponent(token)}`);
+    if(res.status === 404){
+      app.innerHTML = '<div class="state error">Ce lien est invalide ou a déjà été utilisé.</div>';
+      return;
+    }
+    if(res.status === 409){
+      app.innerHTML = '<div class="state error">Cette version du plan n\'est plus celle en attente de décision.</div>';
+      return;
+    }
+    if(!res.ok) throw new Error('load_failed');
+    const data = await res.json();
+    if(data.status !== 'SENT'){
+      app.innerHTML = `<div class="state">Ce plan a déjà reçu une décision (${esc(data.status)}).</div>`;
+      return;
+    }
+    renderPlan(data);
+  }catch(err){
+    app.innerHTML = '<div class="state error">Erreur de chargement — réessayez dans un instant.</div>';
+  }
+}
+load();
+</script>
+</body>
+</html>

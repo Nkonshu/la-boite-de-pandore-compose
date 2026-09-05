@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex">
+<title>Confirmation de contact — La Boîte de Pandore</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg?v=2">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root { --bg:#0B0D10; --surface:#14171C; --accent:#E8A33D; --good:#3DBD8C; --bad:#E2685A; --text:#F3F1EC; --mute:#8B909A; --border:#262B33; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'IBM Plex Sans', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  h1 { font-family: 'Instrument Sans', sans-serif; font-size: 24px; margin: 0 0 10px; }
+  .wrap { max-width: 480px; margin: 0 auto; padding: 90px 24px; text-align: center; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 36px 28px; }
+  .icon { font-size: 40px; margin-bottom: 18px; }
+  p { color: var(--mute); line-height: 1.6; margin: 0; }
+  .ok h1 { color: var(--good); }
+  .ko h1 { color: var(--bad); }
+</style>
+</head>
+<body>
+<div class="wrap"><div class="card" id="app">
+  <p>Vérification en cours...</p>
+</div></div>
+<script>
+async function run(){
+  const app = document.getElementById('app');
+  const token = new URLSearchParams(location.search).get('token');
+  if(!token){
+    app.className = 'ko';
+    app.innerHTML = '<div class="icon">⚠️</div><h1>Lien invalide</h1><p>Aucun jeton de vérification dans ce lien.</p>';
+    return;
+  }
+  try{
+    const res = await fetch(`/api/public/contacts/${encodeURIComponent(token)}/verify`);
+    if(res.ok){
+      app.className = 'ok';
+      app.innerHTML = '<div class="icon">✓</div><h1>Adresse confirmée</h1><p>Votre contact est vérifié. Vous pouvez fermer cette page.</p>';
+      return;
+    }
+    const data = await res.json().catch(() => ({}));
+    const msg = (data.error && data.error.message) || '';
+    app.className = 'ko';
+    if(res.status === 404){
+      app.innerHTML = '<div class="icon">⚠️</div><h1>Lien déjà utilisé ou invalide</h1><p>Ce lien de vérification a peut-être déjà été utilisé.</p>';
+    } else if(msg.includes('expiré')){
+      app.innerHTML = '<div class="icon">⏱️</div><h1>Lien expiré</h1><p>Ce lien de vérification n\'est plus valable (24h). Demandez un nouveau lien.</p>';
+    } else {
+      app.innerHTML = `<div class="icon">⚠️</div><h1>Vérification impossible</h1><p>${msg ? msg.replace(/[<>&]/g, '') : 'Réessayez dans un instant.'}</p>`;
+    }
+  }catch(err){
+    app.className = 'ko';
+    app.innerHTML = '<div class="icon">⚠️</div><h1>Erreur réseau</h1><p>Réessayez dans un instant.</p>';
+  }
+}
+run();
+</script>
+</body>
+</html>

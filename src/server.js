@@ -6,6 +6,12 @@ const crypto = require('crypto');
 const { spawn } = require('child_process');
 
 const app = express();
+// trust proxy = 1 : Traefik (coolify-proxy) est le seul reverse proxy en
+// amont (même réseau Docker) — un seul hop de confiance, ni plus (un XFF
+// forgé plus loin dans la chaîne ne doit jamais être cru) ni moins (sinon
+// req.ip renvoie l'IP interne de Traefik, pas celle du vrai client — voir
+// tranche F, correctif rate limiting).
+app.set('trust proxy', 1);
 app.use(express.json({ limit: '2mb' }));
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
@@ -237,7 +243,18 @@ app.post('/api/audit', async (req, res) => {
       || crypto.createHash('sha256').update(JSON.stringify({ email, answers })).digest('hex');
     const goRes = await fetch(`${PANDORE_API_BASE}/public/audits`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Idempotency-Key': idempotencyKey },
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': idempotencyKey,
+        // X-Pandore-Client-IP : pandore-api n'étant jamais exposé
+        // publiquement, tout appel qui l'atteint vient nécessairement de ce
+        // process compose — la frontière réseau (Traefik -> compose -> Go
+        // interne uniquement) est elle-même la garantie de confiance, pas
+        // un allowlisting d'IP supplémentaire (tranche F, correctif rate
+        // limiting : deux visiteurs distincts derrière ce même compose ne
+        // doivent plus partager un seul bucket).
+        'X-Pandore-Client-IP': req.ip,
+      },
       body: JSON.stringify({ audit_schema_version: 'v1', raw_answers: answers }),
     });
     const data = await goRes.json();
@@ -436,6 +453,50 @@ app.post('/api/auth/login', async (req, res) => {
   } catch (err) {
     console.error('auth login proxy:', err.message);
     res.status(502).json({ error: 'Connexion impossible' });
+  }
+});
+
+// Tranche F — proxies publics minimaux vers /public/contacts et
+// /public/plans (Go). Aucun secret ici : la preuve est le jeton opaque
+// lui-même, la cible est toujours résolue serveur-side côté Go (jamais un
+// tenant_id/contact_id/plan_id fourni par le navigateur, voir verify-contact.html
+// et plan-decision.html). Pas de checkAdmin : ces routes sont publiques par
+// nature, comme /api/audit.
+app.get('/api/public/contacts/:token/verify', async (req, res) => {
+  try {
+    const goRes = await fetch(`${PANDORE_API_BASE}/public/contacts/${encodeURIComponent(req.params.token)}/verify`);
+    const data = await goRes.json().catch(() => ({}));
+    res.status(goRes.status).json(data);
+  } catch (err) {
+    console.error('public contact verify proxy:', err.message);
+    res.status(502).json({ error: 'Vérification impossible pour le moment' });
+  }
+});
+
+app.get('/api/public/plans/:token', async (req, res) => {
+  try {
+    const goRes = await fetch(`${PANDORE_API_BASE}/public/plans/${encodeURIComponent(req.params.token)}`);
+    const data = await goRes.json().catch(() => ({}));
+    res.status(goRes.status).json(data);
+  } catch (err) {
+    console.error('public plan proxy:', err.message);
+    res.status(502).json({ error: 'Lecture impossible pour le moment' });
+  }
+});
+
+app.post('/api/public/plans/:token/decision', async (req, res) => {
+  const { decision, comment } = req.body || {};
+  try {
+    const goRes = await fetch(`${PANDORE_API_BASE}/public/plans/${encodeURIComponent(req.params.token)}/decision`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ decision, comment: comment || '' }),
+    });
+    const data = await goRes.json().catch(() => ({}));
+    res.status(goRes.status).json(data);
+  } catch (err) {
+    console.error('public plan decision proxy:', err.message);
+    res.status(502).json({ error: 'Enregistrement impossible pour le moment' });
   }
 });
 
