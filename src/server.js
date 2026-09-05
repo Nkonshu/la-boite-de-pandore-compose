@@ -171,6 +171,57 @@ const PANDORE_API_BASE = process.env.PANDORE_API_BASE || 'http://10.0.1.1:4000';
 // une fois le rollback n8n plus nécessaire.
 const AUDIT_BACKEND = process.env.AUDIT_BACKEND || 'go';
 
+// PANDORE_SERVICE_EMAIL/PASSWORD — F0 (régression corrigée) : depuis la
+// tranche C, POST /admin/audits/{id}/approve exige une vraie session
+// (requireSession + PermApproveClientBrain), plus x-internal-secret. Ce
+// n'est pas un contournement : compose se connecte comme un vrai
+// PANDORE_SUPER_ADMIN dédié (compte de service, créé une fois via
+// cmd/bootstrapadmin côté pandore), exactement le même mécanisme qu'un
+// opérateur humain — pas une Auth V2, pas une exception backend.
+const PANDORE_SERVICE_EMAIL = process.env.PANDORE_SERVICE_EMAIL;
+const PANDORE_SERVICE_PASSWORD = process.env.PANDORE_SERVICE_PASSWORD;
+
+// goSessionToken — mis en cache en mémoire process (une session dure 30
+// jours côté Go, voir internal/core/session.go) : pas besoin de se
+// reconnecter à chaque appel. goSessionFetch réessaie une fois avec une
+// session fraîche sur un 401 (session révoquée/expirée), jamais plus —
+// un deuxième 401 remonte tel quel, il ne doit jamais y avoir de boucle.
+let goSessionToken = null;
+
+async function getGoSessionToken(forceRefresh = false) {
+  if (goSessionToken && !forceRefresh) return goSessionToken;
+  if (!PANDORE_SERVICE_EMAIL || !PANDORE_SERVICE_PASSWORD) {
+    throw new Error('PANDORE_SERVICE_EMAIL/PANDORE_SERVICE_PASSWORD absents — impossible de créer une session Go');
+  }
+  const res = await fetch(`${PANDORE_API_BASE}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: PANDORE_SERVICE_EMAIL, password: PANDORE_SERVICE_PASSWORD }),
+  });
+  if (!res.ok) throw new Error(`login compte de service Go échoué: HTTP ${res.status}`);
+  const data = await res.json();
+  goSessionToken = data.token;
+  return goSessionToken;
+}
+
+// goSessionFetch — pour les routes migrées vers requireSession (approve,
+// et toute future route de ce type) — jamais x-internal-secret sur celles-ci.
+async function goSessionFetch(path, opts = {}) {
+  const token = await getGoSessionToken();
+  let res = await fetch(`${PANDORE_API_BASE}${path}`, {
+    ...opts,
+    headers: { ...(opts.headers || {}), Authorization: `Bearer ${token}` },
+  });
+  if (res.status === 401) {
+    const freshToken = await getGoSessionToken(true);
+    res = await fetch(`${PANDORE_API_BASE}${path}`, {
+      ...opts,
+      headers: { ...(opts.headers || {}), Authorization: `Bearer ${freshToken}` },
+    });
+  }
+  return res;
+}
+
 async function n8nWebhook(pathAndQuery, opts = {}) {
   const res = await fetch(`${N8N_BASE}/webhook/${pathAndQuery}`, opts);
   const text = await res.text();
@@ -376,14 +427,17 @@ app.get('/api/admin/audits/:id', async (req, res) => {
 // approve/reject/reprocess — jamais déclenchés automatiquement : chaque
 // appel correspond à un clic explicite de l'admin sur l'écran de revue
 // (audit-review.html), pas à une action système.
+// F0 : approved_by n'est plus envoyé — Go l'ignore depuis la tranche C
+// (il dérive systématiquement l'identité de la session), le renvoyer
+// laisserait croire à tort qu'il compte encore.
 app.post('/api/admin/audits/:id/approve', async (req, res) => {
   if (!checkAdmin(req, res)) return;
-  const { tenant_id, tenant_name, approved_by } = req.body || {};
+  const { tenant_id, tenant_name } = req.body || {};
   try {
-    const goRes = await fetch(`${PANDORE_API_BASE}/admin/audits/${encodeURIComponent(req.params.id)}/approve`, {
+    const goRes = await goSessionFetch(`/admin/audits/${encodeURIComponent(req.params.id)}/approve`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-internal-secret': GO_INTERNAL_SECRET },
-      body: JSON.stringify({ tenant_id: tenant_id || '', tenant_name: tenant_name || '', approved_by: approved_by || '' }),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tenant_id: tenant_id || '', tenant_name: tenant_name || '' }),
     });
     const data = await goRes.json();
     res.status(goRes.status).json(data);
