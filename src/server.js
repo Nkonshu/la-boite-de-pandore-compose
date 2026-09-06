@@ -500,6 +500,37 @@ app.post('/api/public/plans/:token/decision', async (req, res) => {
   }
 });
 
+// S5.2-C1 — proxy public minimal vers /public/clarifications (Go), même
+// patron que /api/public/plans ci-dessus : jamais de secret, la cible est
+// résolue serveur-side par Go depuis le seul jeton opaque. Le jeton n'est
+// jamais journalisé (pas de console.error incluant req.params.token).
+app.get('/api/public/clarifications/:token', async (req, res) => {
+  try {
+    const goRes = await fetch(`${PANDORE_API_BASE}/public/clarifications/${encodeURIComponent(req.params.token)}`);
+    const data = await goRes.json().catch(() => ({}));
+    res.status(goRes.status).json(data);
+  } catch (err) {
+    console.error('public clarification proxy:', err.message);
+    res.status(502).json({ error: 'Lecture impossible pour le moment' });
+  }
+});
+
+app.post('/api/public/clarifications/:token/response', async (req, res) => {
+  const { answers } = req.body || {};
+  try {
+    const goRes = await fetch(`${PANDORE_API_BASE}/public/clarifications/${encodeURIComponent(req.params.token)}/response`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ answers: answers || [] }),
+    });
+    const data = await goRes.json().catch(() => ({}));
+    res.status(goRes.status).json(data);
+  } catch (err) {
+    console.error('public clarification response proxy:', err.message);
+    res.status(502).json({ error: 'Enregistrement impossible pour le moment' });
+  }
+});
+
 app.post('/api/auth/logout', async (req, res) => {
   if (!checkAdmin(req, res)) return;
   const authorization = req.get('Authorization');

@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex">
+<title>Précisions demandées — La Boîte de Pandore</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg?v=2">
+<style>
+  :root { --bg:#0B0D10; --surface:#14171C; --accent:#E8A33D; --good:#3DBD8C; --bad:#E2685A; --text:#F3F1EC; --mute:#8B909A; --border:#262B33; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; -webkit-font-smoothing: antialiased; }
+  h1 { margin: 0 0 30px; font-weight: 700; font-size: 26px; }
+  .wrap { max-width: 640px; margin: 0 auto; padding: 48px 24px 90px; }
+  .eyebrow { font-size: 12px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); margin-bottom: 10px; }
+  .intro { color: var(--mute); line-height: 1.6; margin-bottom: 26px; }
+  .question { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 20px 22px; margin-bottom: 14px; }
+  .question label { display: block; font-weight: 600; margin-bottom: 10px; line-height: 1.5; }
+  textarea { width: 100%; min-height: 80px; background: #0F1216; color: var(--text); border: 1px solid var(--border); border-radius: 10px; padding: 12px; font-family: inherit; font-size: 14px; resize: vertical; }
+  .req { color: var(--bad); font-size: 12px; margin-top: 6px; display: none; }
+  .req.show { display: block; }
+  .actions { margin-top: 24px; }
+  button { font-family: inherit; font-size: 14px; font-weight: 600; padding: 12px 20px; border-radius: 10px; border: 1px solid var(--accent); cursor: pointer; background: var(--surface); color: var(--accent); }
+  button:hover { filter: brightness(1.15); }
+  button:disabled { opacity: 0.5; cursor: default; }
+  .state { text-align: center; padding: 100px 24px; color: var(--mute); }
+  .state.error { color: var(--bad); }
+  .state.ok { color: var(--good); }
+</style>
+</head>
+<body>
+<div class="wrap" id="app"><div class="state">Chargement...</div></div>
+<script>
+function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+const token = new URLSearchParams(location.search).get('token');
+const app = document.getElementById('app');
+
+function renderQuestions(data){
+  app.innerHTML = `
+    <div class="eyebrow">La Boîte de Pandore</div>
+    <h1>Quelques précisions nécessaires</h1>
+    <div class="intro">Pour préparer votre accompagnement au mieux, merci de répondre aux questions ci-dessous. Si une question ne vous concerne pas ou que vous ne connaissez pas la réponse, indiquez-le simplement ("je ne sais pas").</div>
+    ${data.questions.map((q, i) => `
+      <div class="question">
+        <label for="answer-${i}">${esc(q.prompt)}</label>
+        <textarea id="answer-${i}" data-ref="${esc(q.ref)}"></textarea>
+        <div class="req" id="req-${i}">Une réponse est requise (vous pouvez écrire "je ne sais pas").</div>
+      </div>
+    `).join('')}
+    <div class="actions"><button id="submit-btn">Envoyer mes réponses</button></div>
+  `;
+  document.getElementById('submit-btn').addEventListener('click', () => submit(data.questions.length));
+}
+
+async function submit(count){
+  const btn = document.getElementById('submit-btn');
+  const answers = [];
+  let ok = true;
+  for (let i = 0; i < count; i++){
+    const field = document.getElementById(`answer-${i}`);
+    const text = field.value.trim();
+    const reqEl = document.getElementById(`req-${i}`);
+    if (!text){
+      reqEl.classList.add('show');
+      ok = false;
+    } else {
+      reqEl.classList.remove('show');
+      answers.push({ question_ref: field.dataset.ref, text });
+    }
+  }
+  if (!ok) return;
+
+  btn.disabled = true;
+  btn.textContent = 'Envoi...';
+  try{
+    const res = await fetch(`/api/public/clarifications/${encodeURIComponent(token)}/response`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ answers }),
+    });
+    if (res.ok){
+      app.innerHTML = '<div class="state ok">✓ Merci, vos réponses ont bien été enregistrées. Vous pouvez fermer cette page.</div>';
+      if (window.history && window.history.replaceState){
+        window.history.replaceState({}, document.title, location.pathname);
+      }
+      return;
+    }
+    const data = await res.json().catch(() => ({}));
+    const msg = (data.error && data.error.message) || 'Erreur lors de l\'enregistrement.';
+    app.innerHTML = `<div class="state error">${esc(msg)}</div>`;
+  }catch(err){
+    app.innerHTML = '<div class="state error">Erreur réseau — réessayez dans un instant.</div>';
+  }
+}
+
+async function load(){
+  if (!token){
+    app.innerHTML = '<div class="state error">Aucun lien valide fourni.</div>';
+    return;
+  }
+  try{
+    const res = await fetch(`/api/public/clarifications/${encodeURIComponent(token)}`);
+    if (res.status === 404){
+      app.innerHTML = '<div class="state error">Ce lien est invalide ou a expiré.</div>';
+      return;
+    }
+    if (!res.ok) throw new Error('load_failed');
+    const data = await res.json();
+    if (data.status === 'ANSWERED'){
+      app.innerHTML = '<div class="state">Vous avez déjà répondu à ces questions. Merci.</div>';
+      return;
+    }
+    if (data.status === 'EXPIRED'){
+      app.innerHTML = '<div class="state error">Ce lien a expiré.</div>';
+      return;
+    }
+    if (data.status !== 'PENDING' || !data.questions || !data.questions.length){
+      app.innerHTML = '<div class="state error">Ce lien n\'est plus disponible.</div>';
+      return;
+    }
+    renderQuestions(data);
+  }catch(err){
+    app.innerHTML = '<div class="state error">Erreur de chargement — réessayez dans un instant.</div>';
+  }
+}
+load();
+</script>
+</body>
+</html>
