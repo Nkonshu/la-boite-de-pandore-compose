@@ -12,21 +12,54 @@
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
   body { background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; -webkit-font-smoothing: antialiased; }
-  h1, h2 { margin: 0; font-weight: 700; }
-  .wrap { max-width: 640px; margin: 0 auto; padding: 48px 24px 90px; }
+  h1, h2, h3 { margin: 0; font-weight: 700; }
+  .wrap { max-width: 640px; margin: 0 auto; padding: 32px 20px 90px; }
   .eyebrow { font-size: 12px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); margin-bottom: 10px; }
-  h1 { font-size: 26px; margin-bottom: 30px; }
-  .section { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 20px 22px; margin-bottom: 14px; }
-  .section h3 { font-family: ui-monospace, 'SF Mono', Consolas, monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); margin-bottom: 10px; }
-  .section p { margin: 0; line-height: 1.6; white-space: pre-wrap; }
+  h1 { font-size: 24px; margin-bottom: 22px; line-height: 1.3; }
+
+  /* Résumé rapide (niveau 1) */
+  .summary-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 20px; margin-bottom: 20px; }
+  .summary-row { display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .summary-row:last-child { border-bottom: none; }
+  .summary-label { flex: 0 0 110px; font-size: 12px; color: var(--mute); text-transform: uppercase; letter-spacing: 0.04em; padding-top: 2px; }
+  .summary-value { flex: 1; font-size: 15px; line-height: 1.5; }
+
+  /* Sections niveau 2 */
+  .section { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 18px 20px; margin-bottom: 12px; }
+  .section h3 { font-size: 15px; margin-bottom: 8px; }
+  .section p { margin: 0; line-height: 1.6; white-space: pre-wrap; font-size: 14.5px; }
+  .bullets { margin: 0; padding-left: 20px; }
+  .bullets li { margin-bottom: 6px; line-height: 1.5; font-size: 14.5px; }
+  .bullets li:last-child { margin-bottom: 0; }
+
+  /* Niveau 3 : détails repliables */
+  details.section { padding: 0; }
+  details.section summary { cursor: pointer; padding: 16px 20px; font-size: 14.5px; font-weight: 600; color: var(--accent); list-style: none; }
+  details.section summary::-webkit-details-marker { display: none; }
+  details.section summary::before { content: '+ '; }
+  details.section[open] summary::before { content: '– '; }
+  details.section .detail-body { padding: 0 20px 18px; }
+  .point { display: flex; gap: 8px; margin-bottom: 10px; font-size: 14px; line-height: 1.5; }
+  .point:last-child { margin-bottom: 0; }
+  .point-tag { flex: 0 0 auto; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; padding: 2px 7px; border-radius: 6px; height: fit-content; }
+  .tag-unknown { background: rgba(139,144,154,0.2); color: var(--mute); }
+  .tag-tradeoff { background: rgba(232,201,61,0.15); color: var(--warn); }
+  .tag-risk { background: rgba(226,104,90,0.15); color: var(--bad); }
+  .tag-next { background: rgba(61,189,140,0.15); color: var(--good); }
+
   .missing { color: var(--warn); font-size: 13px; margin-top: 8px; }
-  .actions { display: flex; gap: 10px; margin-top: 28px; flex-wrap: wrap; }
-  button { font-family: inherit; font-size: 14px; font-weight: 600; padding: 12px 18px; border-radius: 10px; border: 1px solid var(--border); cursor: pointer; background: var(--surface); color: var(--text); }
+
+  /* Portée de la décision */
+  .decision-scope { font-size: 13px; color: var(--mute); line-height: 1.5; margin: 22px 0 14px; padding: 14px 16px; background: rgba(139,144,154,0.08); border-radius: 10px; }
+
+  .question { font-size: 16px; font-weight: 700; margin-bottom: 14px; }
+  .actions { display: flex; flex-direction: column; gap: 10px; }
+  button { font-family: inherit; font-size: 14.5px; font-weight: 600; padding: 14px 18px; border-radius: 10px; border: 1px solid var(--border); cursor: pointer; background: var(--surface); color: var(--text); width: 100%; text-align: left; }
   button:hover { filter: brightness(1.15); }
   .btn-approve { border-color: var(--good); color: var(--good); }
   .btn-changes { border-color: var(--warn); color: var(--warn); }
   .btn-reject { border-color: var(--bad); color: var(--bad); }
-  .decision-box { margin-top: 18px; display: none; }
+  .decision-box { margin-top: 14px; display: none; }
   .decision-box.open { display: block; }
   textarea { width: 100%; min-height: 90px; background: #0F1216; color: var(--text); border: 1px solid var(--border); border-radius: 10px; padding: 12px; font-family: inherit; font-size: 14px; resize: vertical; }
   .req { color: var(--bad); font-size: 12px; margin-top: 4px; }
@@ -34,6 +67,11 @@
   .state { text-align: center; padding: 100px 24px; color: var(--mute); }
   .state.error { color: var(--bad); }
   .state.ok { color: var(--good); }
+
+  @media (max-width: 420px) {
+    .summary-row { flex-direction: column; gap: 2px; }
+    .summary-label { flex: none; }
+  }
 </style>
 </head>
 <body>
@@ -43,7 +81,92 @@ function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&
 const token = new URLSearchParams(location.search).get('token');
 const app = document.getElementById('app');
 
-function renderPlan(p){
+const POINT_LABELS = {
+  CONFIRMED_UNKNOWN: { tag: 'À déterminer', cls: 'tag-unknown' },
+  FEASIBILITY_TRADEOFF: { tag: 'À arbitrer', cls: 'tag-tradeoff' },
+  RISK: { tag: 'Point de vigilance', cls: 'tag-risk' },
+  NEXT_ACTION: { tag: 'Prochaine étape', cls: 'tag-next' },
+};
+
+function renderDecisionArea(decisionScopeText){
+  return `
+    ${decisionScopeText ? `<div class="decision-scope">${esc(decisionScopeText)}</div>` : ''}
+    <div class="question">Ce plan vous convient-il ?</div>
+    <div class="actions">
+      <button class="btn-approve" data-decision="APPROVED">Oui, ce plan me convient</button>
+      <button class="btn-changes" data-decision="CHANGES_REQUESTED">Je souhaite modifier certains points</button>
+      <button class="btn-reject" data-decision="REJECTED">Ce plan ne me convient pas</button>
+    </div>
+    <div class="decision-box" id="box-APPROVED">
+      <textarea id="comment-APPROVED" placeholder="Commentaire (optionnel)"></textarea>
+      <div class="confirm-row"><button class="btn-approve" id="confirm-APPROVED">Confirmer</button></div>
+    </div>
+    <div class="decision-box" id="box-CHANGES_REQUESTED">
+      <div style="font-size:13px;color:var(--mute);margin-bottom:8px;">Qu'aimeriez-vous modifier ?</div>
+      <textarea id="comment-CHANGES_REQUESTED" placeholder="Décrivez ce qui doit changer"></textarea>
+      <div class="req" id="req-CHANGES_REQUESTED" style="display:none;">Merci de préciser ce que vous aimeriez modifier.</div>
+      <div class="confirm-row"><button class="btn-changes" id="confirm-CHANGES_REQUESTED">Confirmer</button></div>
+    </div>
+    <div class="decision-box" id="box-REJECTED">
+      <textarea id="comment-REJECTED" placeholder="Commentaire (optionnel)"></textarea>
+      <div class="confirm-row"><button class="btn-reject" id="confirm-REJECTED">Confirmer</button></div>
+    </div>
+  `;
+}
+
+function wireDecisionArea(){
+  for (const btn of app.querySelectorAll('[data-decision]')){
+    btn.addEventListener('click', () => {
+      for (const box of app.querySelectorAll('.decision-box')) box.classList.remove('open');
+      document.getElementById('box-' + btn.dataset.decision).classList.add('open');
+    });
+  }
+  for (const decision of ['APPROVED','CHANGES_REQUESTED','REJECTED']){
+    document.getElementById('confirm-' + decision).addEventListener('click', () => submit(decision));
+  }
+}
+
+// --- Rendu "PRESENTATION" (structuré, divulgation progressive) ---
+function renderPresentation(p){
+  const points = (p.points_to_watch || []).map(pt => {
+    const label = POINT_LABELS[pt.kind] || { tag: 'Point', cls: 'tag-unknown' };
+    return `<div class="point"><span class="point-tag ${label.cls}">${esc(label.tag)}</span><span>${esc(pt.client_text)}</span></div>`;
+  }).join('');
+
+  app.innerHTML = `
+    <div class="eyebrow">Plan d'Accompagnement</div>
+    <h1>Votre décision est attendue</h1>
+
+    <div class="summary-card">
+      <div class="summary-row"><div class="summary-label">Objectif</div><div class="summary-value">${esc(p.objective_summary)}</div></div>
+      <div class="summary-row"><div class="summary-label">Public</div><div class="summary-value">${esc(p.audience_summary)}</div></div>
+      <div class="summary-row"><div class="summary-label">Canal</div><div class="summary-value">${esc(p.channel)}</div></div>
+      <div class="summary-row"><div class="summary-label">Rythme</div><div class="summary-value">${esc(p.cadence_summary)}</div></div>
+      <div class="summary-row"><div class="summary-label">Validation</div><div class="summary-value">${esc(p.validation_summary)}</div></div>
+    </div>
+
+    <div class="section"><h3>Ce que nous avons compris</h3><p>${esc(p.what_we_understood)}</p></div>
+    <div class="section"><h3>Ce que Pandore propose</h3><p>${esc(p.what_pandore_proposes)}</p></div>
+    ${p.pandore_commitments && p.pandore_commitments.length ? `<div class="section"><h3>Ce que Pandore fera</h3><ul class="bullets">${p.pandore_commitments.map(c => `<li>${esc(c)}</li>`).join('')}</ul></div>` : ''}
+    ${p.client_needs && p.client_needs.length ? `<div class="section"><h3>Ce dont nous aurons besoin de votre part</h3><ul class="bullets">${p.client_needs.map(c => `<li>${esc(c)}</li>`).join('')}</ul></div>` : ''}
+    <div class="section"><h3>Comment on mesure</h3><p>${esc(p.measurement_explanation)}</p></div>
+
+    ${(p.why_explanation || points) ? `
+    <details class="section">
+      <summary>Voir plus de détails</summary>
+      <div class="detail-body">
+        ${p.why_explanation ? `<p style="margin-bottom:14px;">${esc(p.why_explanation)}</p>` : ''}
+        ${points}
+      </div>
+    </details>` : ''}
+
+    ${renderDecisionArea(p.decision_scope)}
+  `;
+  wireDecisionArea();
+}
+
+// --- Rendu "LEGACY" (représentation directe historique, inchangée) ---
+function renderLegacy(p){
   const missing = (p.missing_information || []).length
     ? `<div class="missing">Informations manquantes : ${p.missing_information.map(esc).join(', ')}</div>` : '';
   app.innerHTML = `
@@ -56,34 +179,9 @@ function renderPlan(p){
     <div class="section"><h3>De votre côté</h3><p>${esc(p.client_responsibilities) || '—'}</p></div>
     <div class="section"><h3>Comment on mesure</h3><p>${esc(p.measurement_method) || '—'}</p></div>
     ${p.known_limitations ? `<div class="section"><h3>Limites connues</h3><p>${esc(p.known_limitations)}</p></div>` : ''}
-    <div class="actions">
-      <button class="btn-approve" data-decision="APPROVED">Approuver</button>
-      <button class="btn-changes" data-decision="CHANGES_REQUESTED">Demander des modifications</button>
-      <button class="btn-reject" data-decision="REJECTED">Refuser</button>
-    </div>
-    <div class="decision-box" id="box-APPROVED">
-      <textarea id="comment-APPROVED" placeholder="Commentaire (optionnel)"></textarea>
-      <div class="confirm-row"><button class="btn-approve" id="confirm-APPROVED">Confirmer l'approbation</button></div>
-    </div>
-    <div class="decision-box" id="box-CHANGES_REQUESTED">
-      <textarea id="comment-CHANGES_REQUESTED" placeholder="Décrivez ce qui doit changer (obligatoire)"></textarea>
-      <div class="req" id="req-CHANGES_REQUESTED" style="display:none;">Un commentaire est requis pour demander des modifications.</div>
-      <div class="confirm-row"><button class="btn-changes" id="confirm-CHANGES_REQUESTED">Confirmer la demande</button></div>
-    </div>
-    <div class="decision-box" id="box-REJECTED">
-      <textarea id="comment-REJECTED" placeholder="Commentaire (optionnel)"></textarea>
-      <div class="confirm-row"><button class="btn-reject" id="confirm-REJECTED">Confirmer le refus</button></div>
-    </div>
+    ${renderDecisionArea('')}
   `;
-  for (const btn of app.querySelectorAll('[data-decision]')){
-    btn.addEventListener('click', () => {
-      for (const box of app.querySelectorAll('.decision-box')) box.classList.remove('open');
-      document.getElementById('box-' + btn.dataset.decision).classList.add('open');
-    });
-  }
-  for (const decision of ['APPROVED','CHANGES_REQUESTED','REJECTED']){
-    document.getElementById('confirm-' + decision).addEventListener('click', () => submit(decision));
-  }
+  wireDecisionArea();
 }
 
 async function submit(decision){
@@ -131,7 +229,11 @@ async function load(){
       app.innerHTML = `<div class="state">Ce plan a déjà reçu une décision (${esc(data.status)}).</div>`;
       return;
     }
-    renderPlan(data);
+    if(data.kind === 'PRESENTATION'){
+      renderPresentation(data);
+    } else {
+      renderLegacy(data);
+    }
   }catch(err){
     app.innerHTML = '<div class="state error">Erreur de chargement — réessayez dans un instant.</div>';
   }
