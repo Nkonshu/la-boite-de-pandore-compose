@@ -12,10 +12,18 @@
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
   body { background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; -webkit-font-smoothing: antialiased; }
-  h1, h2, h3 { margin: 0; font-weight: 700; }
+  h1, h2, h3, h4 { margin: 0; font-weight: 700; }
   .wrap { max-width: 640px; margin: 0 auto; padding: 32px 20px 90px; }
   .eyebrow { font-size: 12px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); margin-bottom: 10px; }
-  h1 { font-size: 24px; margin-bottom: 22px; line-height: 1.3; }
+  h1 { font-size: 24px; margin-bottom: 8px; line-height: 1.3; }
+  .intro { color: var(--mute); font-size: 14px; line-height: 1.5; margin-bottom: 22px; }
+
+  /* Repère de parcours (orientation uniquement, non interactif) */
+  .journey { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; margin-bottom: 22px; font-size: 11.5px; }
+  .journey-step { color: var(--mute); padding: 4px 9px; border-radius: 999px; border: 1px solid var(--border); white-space: nowrap; }
+  .journey-step.done { color: var(--good); border-color: var(--good); }
+  .journey-step.current { color: var(--bg); background: var(--accent); border-color: var(--accent); font-weight: 700; }
+  .journey-arrow { color: var(--mute); font-size: 11px; }
 
   /* Résumé rapide (niveau 1) */
   .summary-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 20px; margin-bottom: 20px; }
@@ -39,6 +47,10 @@
   details.section summary::before { content: '+ '; }
   details.section[open] summary::before { content: '– '; }
   details.section .detail-body { padding: 0 20px 18px; }
+  .detail-subsection { margin-bottom: 18px; }
+  .detail-subsection:last-child { margin-bottom: 0; }
+  .detail-subsection h4 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--mute); margin-bottom: 8px; }
+  .detail-subsection p { margin: 0; line-height: 1.6; font-size: 14.5px; }
   .point { display: flex; gap: 8px; margin-bottom: 10px; font-size: 14px; line-height: 1.5; }
   .point:last-child { margin-bottom: 0; }
   .point-tag { flex: 0 0 auto; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; padding: 2px 7px; border-radius: 6px; height: fit-content; }
@@ -50,7 +62,8 @@
   .missing { color: var(--warn); font-size: 13px; margin-top: 8px; }
 
   /* Portée de la décision */
-  .decision-scope { font-size: 13px; color: var(--mute); line-height: 1.5; margin: 22px 0 14px; padding: 14px 16px; background: rgba(139,144,154,0.08); border-radius: 10px; }
+  .decision-scope { font-size: 13.5px; color: var(--text); line-height: 1.6; margin: 22px 0 14px; padding: 16px; background: rgba(139,144,154,0.08); border-radius: 10px; }
+  .decision-scope .scope-note { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); color: var(--mute); font-size: 13px; }
 
   .question { font-size: 16px; font-weight: 700; margin-bottom: 14px; }
   .actions { display: flex; flex-direction: column; gap: 10px; }
@@ -88,9 +101,42 @@ const POINT_LABELS = {
   NEXT_ACTION: { tag: 'Prochaine étape', cls: 'tag-next' },
 };
 
+// Repère de parcours — orientation uniquement, jamais une autorisation :
+// "Préparation de la stratégie" reste affiché comme étape FUTURE, jamais
+// comme déjà engagée (aucune génération de Strategy n'est autorisée par
+// cette page).
+function renderJourney(){
+  const steps = [
+    { label: 'Audit terminé', state: 'done' },
+    { label: "Plan d'accompagnement", state: 'done' },
+    { label: 'Votre validation', state: 'current' },
+    { label: 'Préparation de la stratégie', state: '' },
+  ];
+  return `<div class="journey">${steps.map((s, i) => `
+    ${i > 0 ? '<span class="journey-arrow">→</span>' : ''}
+    <span class="journey-step ${s.state}">${esc(s.label)}</span>
+  `).join('')}</div>`;
+}
+
+function renderIntro(){
+  return `
+    <div class="eyebrow">Plan d'Accompagnement</div>
+    <h1>Voici le plan que Pandore vous propose</h1>
+    <div class="intro">Prenez quelques minutes pour vérifier que nous avons bien compris votre besoin et que la manière de travailler proposée vous convient.</div>
+    ${renderJourney()}
+  `;
+}
+
+// decisionScopeText : contenu spécifique rédigé pour ce plan (optionnel).
+// La garantie de non-autorisation, elle, est TOUJOURS le même texte fixe,
+// jamais dépendante de ce qu'un opérateur a pu écrire pour un plan donné.
 function renderDecisionArea(decisionScopeText){
   return `
-    ${decisionScopeText ? `<div class="decision-scope">${esc(decisionScopeText)}</div>` : ''}
+    <div class="decision-scope">
+      En approuvant ce plan, vous confirmez simplement que nous pouvons travailler sur cette base.<br>
+      Rien ne sera publié automatiquement. Toute nouvelle étape nécessitant votre accord vous sera présentée séparément.
+      ${decisionScopeText ? `<div class="scope-note">${esc(decisionScopeText)}</div>` : ''}
+    </div>
     <div class="question">Ce plan vous convient-il ?</div>
     <div class="actions">
       <button class="btn-approve" data-decision="APPROVED">Oui, ce plan me convient</button>
@@ -133,9 +179,11 @@ function renderPresentation(p){
     return `<div class="point"><span class="point-tag ${label.cls}">${esc(label.tag)}</span><span>${esc(pt.client_text)}</span></div>`;
   }).join('');
 
+  const hasWhy = !!p.why_explanation;
+  const hasPoints = !!points;
+
   app.innerHTML = `
-    <div class="eyebrow">Plan d'Accompagnement</div>
-    <h1>Votre décision est attendue</h1>
+    ${renderIntro()}
 
     <div class="summary-card">
       <div class="summary-row"><div class="summary-label">Objectif</div><div class="summary-value">${esc(p.objective_summary)}</div></div>
@@ -149,14 +197,14 @@ function renderPresentation(p){
     <div class="section"><h3>Ce que Pandore propose</h3><p>${esc(p.what_pandore_proposes)}</p></div>
     ${p.pandore_commitments && p.pandore_commitments.length ? `<div class="section"><h3>Ce que Pandore fera</h3><ul class="bullets">${p.pandore_commitments.map(c => `<li>${esc(c)}</li>`).join('')}</ul></div>` : ''}
     ${p.client_needs && p.client_needs.length ? `<div class="section"><h3>Ce dont nous aurons besoin de votre part</h3><ul class="bullets">${p.client_needs.map(c => `<li>${esc(c)}</li>`).join('')}</ul></div>` : ''}
-    <div class="section"><h3>Comment on mesure</h3><p>${esc(p.measurement_explanation)}</p></div>
+    <div class="section"><h3>Comment nous mesurerons les résultats</h3><p>${esc(p.measurement_explanation)}</p></div>
 
-    ${(p.why_explanation || points) ? `
+    ${(hasWhy || hasPoints) ? `
     <details class="section">
       <summary>Voir plus de détails</summary>
       <div class="detail-body">
-        ${p.why_explanation ? `<p style="margin-bottom:14px;">${esc(p.why_explanation)}</p>` : ''}
-        ${points}
+        ${hasWhy ? `<div class="detail-subsection"><h4>Pourquoi nous proposons cette approche</h4><p>${esc(p.why_explanation)}</p></div>` : ''}
+        ${hasPoints ? `<div class="detail-subsection"><h4>Points à garder en tête</h4>${points}</div>` : ''}
       </div>
     </details>` : ''}
 
@@ -170,18 +218,30 @@ function renderLegacy(p){
   const missing = (p.missing_information || []).length
     ? `<div class="missing">Informations manquantes : ${p.missing_information.map(esc).join(', ')}</div>` : '';
   app.innerHTML = `
-    <div class="eyebrow">Plan d'Accompagnement — version ${p.version}</div>
-    <h1>Votre décision est attendue</h1>
+    ${renderIntro()}
     <div class="section"><h3>Ce que nous avons compris</h3><p>${esc(p.problem_understood) || '—'}</p></div>
     <div class="section"><h3>Audience</h3><p>${esc(p.audience) || '—'}</p></div>
     <div class="section"><h3>Proposition</h3><p>${esc(p.proposal) || '—'}</p>${missing}</div>
     <div class="section"><h3>Pandore s'engage à</h3><p>${esc(p.pandore_responsibilities) || '—'}</p></div>
     <div class="section"><h3>De votre côté</h3><p>${esc(p.client_responsibilities) || '—'}</p></div>
-    <div class="section"><h3>Comment on mesure</h3><p>${esc(p.measurement_method) || '—'}</p></div>
+    <div class="section"><h3>Comment nous mesurerons les résultats</h3><p>${esc(p.measurement_method) || '—'}</p></div>
     ${p.known_limitations ? `<div class="section"><h3>Limites connues</h3><p>${esc(p.known_limitations)}</p></div>` : ''}
     ${renderDecisionArea('')}
   `;
   wireDecisionArea();
+}
+
+// Messages client-safe pour un statut déjà décidé — jamais la valeur brute
+// de l'enum backend affichée telle quelle (CHANGES_REQUESTED/APPROVED/
+// REJECTED/EXPIRED/PENDING ne doivent jamais apparaître à l'écran).
+const STATUS_MESSAGES = {
+  APPROVED: 'Vous avez approuvé ce plan.',
+  CHANGES_REQUESTED: 'Votre demande de modification a bien été enregistrée. Pandore préparera une nouvelle version en tenant compte de votre retour.',
+  REJECTED: 'Vous avez indiqué que ce plan ne vous convient pas. Votre retour a bien été enregistré.',
+  EXPIRED: "Ce lien n'est plus actif.",
+};
+function clientSafeStatusMessage(status){
+  return STATUS_MESSAGES[status] || "Ce lien n'est plus actif.";
 }
 
 async function submit(decision){
@@ -197,7 +257,7 @@ async function submit(decision){
       body: JSON.stringify({ decision, comment }),
     });
     if(res.ok){
-      app.innerHTML = '<div class="state ok">✓ Votre décision a été enregistrée. Merci, vous pouvez fermer cette page.</div>';
+      app.innerHTML = `<div class="state ok">✓ ${esc(clientSafeStatusMessage(decision))}</div>`;
       return;
     }
     const data = await res.json().catch(() => ({}));
@@ -226,7 +286,7 @@ async function load(){
     if(!res.ok) throw new Error('load_failed');
     const data = await res.json();
     if(data.status !== 'SENT'){
-      app.innerHTML = `<div class="state">Ce plan a déjà reçu une décision (${esc(data.status)}).</div>`;
+      app.innerHTML = `<div class="state">${esc(clientSafeStatusMessage(data.status))}</div>`;
       return;
     }
     if(data.kind === 'PRESENTATION'){
