@@ -4,7 +4,8 @@
   "description": "Service de composition vidéo (voix off + sous-titres + visuel) pour le pipeline n8n La Boîte de Pandore",
   "main": "src/server.js",
   "scripts": {
-    "start": "node src/server.js"
+    "start": "node src/server.js",
+    "test": "node test/plan-decision.test.js"
   },
   "dependencies": {
     "express": "^4.19.2"

@@ -127,28 +127,59 @@ function renderIntro(){
   `;
 }
 
-// decisionScopeText : contenu spécifique rédigé pour ce plan (optionnel).
-// La garantie de non-autorisation, elle, est TOUJOURS le même texte fixe,
-// jamais dépendante de ce qu'un opérateur a pu écrire pour un plan donné.
-function renderDecisionArea(decisionScopeText){
+// decisionScopeText : contenu spécifique rédigé pour ce plan/cette
+// présentation (optionnel). La garantie de non-autorisation, elle, est
+// TOUJOURS le même texte fixe par Kind, jamais dépendante de ce qu'un
+// opérateur a pu écrire — Editorial Approval Public Frontend Readiness
+// §6 : réutilise decisionScopeText plutôt que de dupliquer la vérité
+// métier, mais garde ce filet de sécurité fixe pour les garanties qui ne
+// doivent jamais dépendre de la rédaction d'un opérateur donné.
+const DECISION_COPY = {
+  PRESENTATION: {
+    guarantee: `En approuvant ce plan, vous confirmez simplement que nous pouvons travailler sur cette base.<br>
+      Rien ne sera publié automatiquement. Toute nouvelle étape nécessitant votre accord vous sera présentée séparément.`,
+    question: 'Ce plan vous convient-il ?',
+    approve: 'Oui, ce plan me convient',
+    changesPrompt: 'Qu’aimeriez-vous modifier ?',
+    reject: 'Ce plan ne me convient pas',
+  },
+  LEGACY: {
+    guarantee: `En approuvant ce plan, vous confirmez simplement que nous pouvons travailler sur cette base.<br>
+      Rien ne sera publié automatiquement. Toute nouvelle étape nécessitant votre accord vous sera présentée séparément.`,
+    question: 'Ce plan vous convient-il ?',
+    approve: 'Oui, ce plan me convient',
+    changesPrompt: 'Qu’aimeriez-vous modifier ?',
+    reject: 'Ce plan ne me convient pas',
+  },
+  EDITORIAL_REVIEW_PRESENTATION: {
+    guarantee: `En approuvant cette orientation, vous acceptez la ligne éditoriale proposée comme guide pour vos futurs contenus.<br>
+      Cela n’approuve aucun contenu précis, n’autorise aucune publication et ne connecte aucun compte social — chaque étape suivante vous sera présentée séparément.`,
+    question: 'Cette orientation éditoriale vous convient-elle ?',
+    approve: 'Oui, cette orientation me convient',
+    changesPrompt: 'Qu’aimeriez-vous ajuster ?',
+    reject: 'Cette orientation ne me convient pas',
+  },
+};
+
+function renderDecisionArea(decisionScopeText, kind){
+  const copy = DECISION_COPY[kind] || DECISION_COPY.PRESENTATION;
   return `
     <div class="decision-scope">
-      En approuvant ce plan, vous confirmez simplement que nous pouvons travailler sur cette base.<br>
-      Rien ne sera publié automatiquement. Toute nouvelle étape nécessitant votre accord vous sera présentée séparément.
+      ${copy.guarantee}
       ${decisionScopeText ? `<div class="scope-note">${esc(decisionScopeText)}</div>` : ''}
     </div>
-    <div class="question">Ce plan vous convient-il ?</div>
+    <div class="question">${esc(copy.question)}</div>
     <div class="actions">
-      <button class="btn-approve" data-decision="APPROVED">Oui, ce plan me convient</button>
+      <button class="btn-approve" data-decision="APPROVED">${esc(copy.approve)}</button>
       <button class="btn-changes" data-decision="CHANGES_REQUESTED">Je souhaite modifier certains points</button>
-      <button class="btn-reject" data-decision="REJECTED">Ce plan ne me convient pas</button>
+      <button class="btn-reject" data-decision="REJECTED">${esc(copy.reject)}</button>
     </div>
     <div class="decision-box" id="box-APPROVED">
       <textarea id="comment-APPROVED" placeholder="Commentaire (optionnel)"></textarea>
       <div class="confirm-row"><button class="btn-approve" id="confirm-APPROVED">Confirmer</button></div>
     </div>
     <div class="decision-box" id="box-CHANGES_REQUESTED">
-      <div style="font-size:13px;color:var(--mute);margin-bottom:8px;">Qu'aimeriez-vous modifier ?</div>
+      <div style="font-size:13px;color:var(--mute);margin-bottom:8px;">${esc(copy.changesPrompt)}</div>
       <textarea id="comment-CHANGES_REQUESTED" placeholder="Décrivez ce qui doit changer"></textarea>
       <div class="req" id="req-CHANGES_REQUESTED" style="display:none;">Merci de préciser ce que vous aimeriez modifier.</div>
       <div class="confirm-row"><button class="btn-changes" id="confirm-CHANGES_REQUESTED">Confirmer</button></div>
@@ -208,7 +239,7 @@ function renderPresentation(p){
       </div>
     </details>` : ''}
 
-    ${renderDecisionArea(p.decision_scope)}
+    ${renderDecisionArea(p.decision_scope, 'PRESENTATION')}
   `;
   wireDecisionArea();
 }
@@ -226,7 +257,38 @@ function renderLegacy(p){
     <div class="section"><h3>De votre côté</h3><p>${esc(p.client_responsibilities) || '—'}</p></div>
     <div class="section"><h3>Comment nous mesurerons les résultats</h3><p>${esc(p.measurement_method) || '—'}</p></div>
     ${p.known_limitations ? `<div class="section"><h3>Limites connues</h3><p>${esc(p.known_limitations)}</p></div>` : ''}
-    ${renderDecisionArea('')}
+    ${renderDecisionArea('', 'LEGACY')}
+  `;
+  wireDecisionArea();
+}
+
+// --- Rendu "EDITORIAL_REVIEW_PRESENTATION" (Editorial Review Client
+// Approval Path) — champs STRICTEMENT limités à ce que le backend fournit
+// (client_text/is_recommendation/decision_scope) : jamais de dimension,
+// source_refs, provenance, hash ou statut Strategy affichés (voir
+// core.EditorialStatement — ces champs n'existent même pas dans la
+// réponse publique, impossibles à afficher par construction).
+function renderEditorialIntro(){
+  return `
+    <div class="eyebrow">Orientation éditoriale</div>
+    <h1>Voici l'orientation que Pandore propose pour vos contenus</h1>
+    <div class="intro">Cette orientation s'appuie sur la stratégie déjà approuvée. Prenez quelques minutes pour vérifier qu'elle vous convient.</div>
+  `;
+}
+
+function renderEditorial(p){
+  document.title = 'Orientation éditoriale — La Boîte de Pandore';
+  const statements = p.statements || [];
+  const established = statements.filter(s => !s.is_recommendation);
+  const recommendations = statements.filter(s => s.is_recommendation);
+
+  app.innerHTML = `
+    ${renderEditorialIntro()}
+
+    ${established.length ? `<div class="section"><h3>Ce qui est déjà établi</h3><ul class="bullets">${established.map(s => `<li>${esc(s.client_text)}</li>`).join('')}</ul></div>` : ''}
+    ${recommendations.length ? `<div class="section"><h3>Nos recommandations</h3><ul class="bullets">${recommendations.map(s => `<li>${esc(s.client_text)}</li>`).join('')}</ul></div>` : ''}
+
+    ${renderDecisionArea(p.decision_scope, 'EDITORIAL_REVIEW_PRESENTATION')}
   `;
   wireDecisionArea();
 }
@@ -234,15 +296,46 @@ function renderLegacy(p){
 // Messages client-safe pour un statut déjà décidé — jamais la valeur brute
 // de l'enum backend affichée telle quelle (CHANGES_REQUESTED/APPROVED/
 // REJECTED/EXPIRED/PENDING ne doivent jamais apparaître à l'écran).
-const STATUS_MESSAGES = {
-  APPROVED: 'Vous avez approuvé ce plan.',
-  CHANGES_REQUESTED: 'Votre demande de modification a bien été enregistrée. Pandore préparera une nouvelle version en tenant compte de votre retour.',
-  REJECTED: 'Vous avez indiqué que ce plan ne vous convient pas. Votre retour a bien été enregistré.',
-  EXPIRED: "Ce lien n'est plus actif.",
+//
+// PENDING_STATUS_BY_KIND — Editorial Approval Public Frontend Readiness
+// §3/§8 : le statut qui signifie "en attente de décision" dépend du Kind.
+// Plan expose son PROPRE Status (SENT une fois envoyé, muté par la
+// décision). EditorialReviewPresentation est immuable et ne porte aucun
+// statut : la réponse publique expose désormais Status=ApprovalRequest.Status
+// (PENDING tant qu'aucune décision n'a été prise) — voir
+// toPublicEditorialReviewPresentationView côté Go.
+const PENDING_STATUS_BY_KIND = {
+  PRESENTATION: 'SENT',
+  LEGACY: 'SENT',
+  EDITORIAL_REVIEW_PRESENTATION: 'PENDING',
 };
-function clientSafeStatusMessage(status){
-  return STATUS_MESSAGES[status] || "Ce lien n'est plus actif.";
+
+const STATUS_MESSAGES = {
+  PRESENTATION: {
+    APPROVED: 'Vous avez approuvé ce plan.',
+    CHANGES_REQUESTED: 'Votre demande de modification a bien été enregistrée. Pandore préparera une nouvelle version en tenant compte de votre retour.',
+    REJECTED: 'Vous avez indiqué que ce plan ne vous convient pas. Votre retour a bien été enregistré.',
+    EXPIRED: "Ce lien n'est plus actif.",
+  },
+  EDITORIAL_REVIEW_PRESENTATION: {
+    APPROVED: 'Vous avez approuvé cette orientation éditoriale.',
+    CHANGES_REQUESTED: 'Votre demande d’ajustement a bien été enregistrée. Pandore en tiendra compte pour la suite.',
+    REJECTED: 'Vous avez indiqué que cette orientation ne vous convient pas. Votre retour a bien été enregistré.',
+    EXPIRED: "Ce lien n'est plus actif.",
+  },
+};
+STATUS_MESSAGES.LEGACY = STATUS_MESSAGES.PRESENTATION;
+
+function clientSafeStatusMessage(status, kind){
+  const messages = STATUS_MESSAGES[kind] || STATUS_MESSAGES.PRESENTATION;
+  return messages[status] || "Ce lien n'est plus actif.";
 }
+
+// currentKind — capturé au chargement, utilisé uniquement pour choisir le
+// bon message de confirmation après soumission (jamais pour changer quel
+// endpoint est appelé : submit() reste un seul chemin générique quel que
+// soit le Kind, exactement comme le décide déjà le backend).
+let currentKind = 'PRESENTATION';
 
 async function submit(decision){
   const comment = document.getElementById('comment-' + decision).value.trim();
@@ -257,7 +350,7 @@ async function submit(decision){
       body: JSON.stringify({ decision, comment }),
     });
     if(res.ok){
-      app.innerHTML = `<div class="state ok">✓ ${esc(clientSafeStatusMessage(decision))}</div>`;
+      app.innerHTML = `<div class="state ok">✓ ${esc(clientSafeStatusMessage(decision, currentKind))}</div>`;
       return;
     }
     const data = await res.json().catch(() => ({}));
@@ -280,16 +373,20 @@ async function load(){
       return;
     }
     if(res.status === 409){
-      app.innerHTML = '<div class="state error">Cette version du plan n\'est plus celle en attente de décision.</div>';
+      app.innerHTML = '<div class="state error">Cette version n\'est plus celle en attente de décision — une version plus récente existe.</div>';
       return;
     }
     if(!res.ok) throw new Error('load_failed');
     const data = await res.json();
-    if(data.status !== 'SENT'){
-      app.innerHTML = `<div class="state">${esc(clientSafeStatusMessage(data.status))}</div>`;
+    currentKind = data.kind || 'PRESENTATION';
+    const pendingStatus = PENDING_STATUS_BY_KIND[currentKind] || 'SENT';
+    if(data.status !== pendingStatus){
+      app.innerHTML = `<div class="state">${esc(clientSafeStatusMessage(data.status, currentKind))}</div>`;
       return;
     }
-    if(data.kind === 'PRESENTATION'){
+    if(currentKind === 'EDITORIAL_REVIEW_PRESENTATION'){
+      renderEditorial(data);
+    } else if(currentKind === 'PRESENTATION'){
       renderPresentation(data);
     } else {
       renderLegacy(data);
