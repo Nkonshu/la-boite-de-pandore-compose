@@ -607,7 +607,7 @@ app.post('/api/admin/status', async (req, res) => {
 
 const META_APP_ID = process.env.META_APP_ID;
 const META_REDIRECT_URI = process.env.META_REDIRECT_URI;
-const META_OAUTH_SCOPES = ['pages_show_list', 'pages_read_engagement', 'instagram_basic'].join(',');
+const META_OAUTH_SCOPES = ['pages_show_list', 'pages_read_engagement', 'instagram_basic', 'pages_manage_posts'].join(',');
 
 // metaOAuthStates — liaison CSRF state -> tenant_id pour la danse OAuth en
 // cours. En mémoire seulement (process unique, pas de cluster ici) : rien
