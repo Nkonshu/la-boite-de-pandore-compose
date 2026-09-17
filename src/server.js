@@ -599,119 +599,264 @@ app.post('/api/admin/status', async (req, res) => {
   }
 });
 
-// --- Platform Engine V1 — connexion de comptes Meta (docs/08_PLATFORM_ENGINE.md,
-// repo pandore) : Go reste le seul détenteur du secret Meta et de la
-// logique d'échange (voir internal/platform/meta, internal/httpapi/admin_platform.go)
-// — compose ne fait que déclencher la redirection OAuth et relayer le
-// `code` reçu, jamais un appel Graph API direct.
-
-const META_APP_ID = process.env.META_APP_ID;
-const META_REDIRECT_URI = process.env.META_REDIRECT_URI;
-const META_OAUTH_SCOPES = ['pages_show_list', 'pages_read_engagement', 'instagram_basic', 'pages_manage_posts'].join(',');
-
-// metaOAuthStates — liaison CSRF state -> tenant_id pour la danse OAuth en
-// cours. En mémoire seulement (process unique, pas de cluster ici) : rien
-// de sensible n'y est stocké, juste quel admin a initié quelle connexion,
-// avec un TTL court (la danse OAuth se termine en quelques minutes ou pas
-// du tout).
-const metaOAuthStates = new Map();
-const META_OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
-
-function pruneMetaOAuthStates() {
-  const now = Date.now();
-  for (const [state, entry] of metaOAuthStates) {
-    if (entry.expiresAt < now) metaOAuthStates.delete(state);
-  }
-}
+// --- H3-008D1J — Generic Platform Connection relay. Remplace l'ancien bloc
+// Meta-spécifique (état OAuth en mémoire, META_APP_ID/META_REDIRECT_URI,
+// authorize-url/callback dédiés Meta) : compose n'est plus qu'une frontière
+// publique GÉNÉRIQUE — aucune sémantique de plateforme, aucun secret Meta,
+// aucun état OAuth propre. Pandore (Go) reste seul détenteur de
+// PlatformIntegrationConfiguration, de PlatformConnectionSession (l'état
+// OAuth durable, jamais recréé ici), de l'échange de token et de la
+// création de SocialAccount — voir internal/platformconnection et
+// internal/platform/facebook (repo pandore, H3-008D1I).
+//
+// Identité : le Bearer Pandore obtenu par le navigateur via
+// POST /api/auth/login (F0.2, déjà établi ci-dessus pour l'approbation
+// d'audit) est relayé TEL QUEL vers les routes tenant-scopées — jamais un
+// compte de service compose (explicitement rejeté en revue pour
+// approveAudit, même raison ici : substituer l'identité de l'admin casse
+// l'auditabilité — voir le commentaire F0.2 plus haut dans ce fichier).
+// ADMIN_PASSWORD (checkAdmin) reste la porte d'accès à l'UI legacy, jamais
+// suffisante seule pour initier/finaliser une connexion.
 
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
-function oauthResultPage(success, message, connectedNames = [], tenantId = '') {
-  const title = success ? 'Connexion réussie' : 'Connexion échouée';
+// platformCallbackResultPage — générique : ne connaît QUE ce que la réponse
+// Pandore contient déjà (session_ref/platform_id/status), jamais une
+// sémantique de plateforme. Si un tenant_id/session/platform a été stashé
+// côté navigateur (sessionStorage, posé par social-accounts.html AVANT la
+// redirection vers la plateforme externe — seul moyen de le faire survivre
+// à un aller-retour vers un domaine tiers), un petit script inline propose
+// un lien direct vers l'étape de sélection de ressource ; sinon un lien
+// générique vers le dashboard suffit. Jamais de token, jamais de secret,
+// jamais le `state` brut dans le corps de la page.
+function platformCallbackResultPage(success, message, session) {
+  const title = success ? 'Connexion en cours' : 'Connexion échouée';
   const body = success
-    ? `<p>Compte(s) connecté(s) :</p><ul>${connectedNames.map((n) => `<li>${escapeHtml(n)}</li>`).join('')}</ul>`
+    ? `<p>Autorisation reçue (session <code>${escapeHtml(session && session.session_ref || '')}</code>, statut <code>${escapeHtml(session && session.status || '')}</code>).</p>
+       <p id="resourceLinkFallback">Retournez à l'admin pour choisir la ressource à connecter.</p>`
     : `<p>${escapeHtml(message || 'Erreur inconnue.')}</p>`;
-  const backHref = tenantId ? `/admin/social-accounts.html?tenant_id=${encodeURIComponent(tenantId)}` : '/admin/social-accounts.html';
+  const sessionRef = success && session ? session.session_ref : '';
+  const platformId = success && session ? session.platform_id : '';
   return `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>${title}</title>
 <style>body{font-family:system-ui,sans-serif;max-width:32rem;margin:4rem auto;padding:0 1rem;color:#1a1a1a}
 h1{font-size:1.25rem}a{color:#2563eb}</style></head>
-<body><h1>${title}</h1>${body}<p><a href="${backHref}">Retour à l'admin</a></p></body></html>`;
+<body><h1>${title}</h1>${body}<p><a id="backLink" href="/admin/social-accounts.html">Retour à l'admin</a></p>
+<script>
+// Générique : lit uniquement ce que CE navigateur a lui-même posé avant de
+// partir vers la plateforme externe (jamais interprété/validé ici — un
+// stash absent ou incohérent retombe simplement sur le lien générique
+// ci-dessus, jamais une erreur).
+(function(){
+  try {
+    var raw = sessionStorage.getItem('pandore_pending_connection');
+    if (!raw) return;
+    var pending = JSON.parse(raw);
+    var sessionRef = ${JSON.stringify(sessionRef)};
+    if (!pending || !pending.tenantId || !pending.platform || pending.sessionRef !== sessionRef) return;
+    var href = '/admin/social-accounts.html?tenant_id=' + encodeURIComponent(pending.tenantId)
+      + '&platform=' + encodeURIComponent(pending.platform)
+      + '&session=' + encodeURIComponent(sessionRef);
+    document.getElementById('backLink').href = href;
+    var fallback = document.getElementById('resourceLinkFallback');
+    if (fallback) fallback.innerHTML = 'Autorisation reçue — <a href="' + href + '">choisir la ressource à connecter</a>.';
+    sessionStorage.removeItem('pandore_pending_connection');
+  } catch (e) { /* stash absent/corrompu : le lien générique suffit */ }
+})();
+</script>
+</body></html>`;
 }
 
-// GET /api/admin/social-accounts/meta/authorize-url — appelé en fetch (avec
-// x-admin-password) depuis social-accounts.html, qui navigue ensuite le
-// navigateur vers l'URL renvoyée. Une redirection directe depuis un
-// handler admin-protégé ne fonctionnerait pas : la navigation qui suit ne
-// porte aucun header custom.
-app.get('/api/admin/social-accounts/meta/authorize-url', (req, res) => {
-  if (!checkAdmin(req, res)) return;
-  if (!META_APP_ID || !META_REDIRECT_URI) {
-    return res.status(503).json({ error: 'Intégration Meta non configurée côté compose (META_APP_ID/META_REDIRECT_URI)' });
+function requirePandoreBearer(req, res) {
+  const authorization = req.get('Authorization');
+  if (!authorization) {
+    res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'session Pandore requise' } });
+    return null;
   }
-  const tenantId = req.query.tenant_id;
-  if (!tenantId) return res.status(400).json({ error: 'tenant_id requis' });
+  return authorization;
+}
 
-  pruneMetaOAuthStates();
-  const state = crypto.randomUUID();
-  metaOAuthStates.set(state, {
-    tenantId,
-    connectedBy: req.query.connected_by || '',
-    expiresAt: Date.now() + META_OAUTH_STATE_TTL_MS,
-  });
-
-  const params = new URLSearchParams({
-    client_id: META_APP_ID,
-    redirect_uri: META_REDIRECT_URI,
-    state,
-    scope: META_OAUTH_SCOPES,
-    response_type: 'code',
-  });
-  res.json({ url: `https://www.facebook.com/v21.0/dialog/oauth?${params}` });
+// GET /api/admin/tenants/:id/platform-connections/available — catalogue
+// générique (Registry Pandore), jamais un nom de plateforme codé en dur
+// ici.
+app.get('/api/admin/tenants/:id/platform-connections/available', async (req, res) => {
+  if (!checkAdmin(req, res)) return;
+  const authorization = requirePandoreBearer(req, res);
+  if (!authorization) return;
+  try {
+    const goRes = await fetch(`${PANDORE_API_BASE}/admin/tenants/${encodeURIComponent(req.params.id)}/platform-connections/available`, {
+      headers: { Authorization: authorization },
+    });
+    const data = await goRes.json().catch(() => ({}));
+    res.status(goRes.status).json(data);
+  } catch (err) {
+    console.error('platform-connections available proxy:', err.message);
+    res.status(502).json({ error: 'Lecture impossible pour le moment' });
+  }
 });
 
-// GET /oauth/meta/callback — cible réelle de META_REDIRECT_URI, atteinte
-// par une redirection navigateur depuis Meta (jamais par fetch) : pas de
-// x-admin-password possible sur cette requête. La preuve d'autorisation
-// est le `code` OAuth lui-même (usage unique, expire vite, lié à cette app
-// + ce redirect_uri) combiné au `state` vérifié contre metaOAuthStates —
-// pas un mot de passe admin.
-app.get('/oauth/meta/callback', async (req, res) => {
-  const { code, state, error, error_description: errorDescription } = req.query;
-  res.set('Content-Type', 'text/html; charset=utf-8');
-
-  if (error) {
-    return res.status(400).send(oauthResultPage(false, errorDescription || error));
-  }
-
-  pruneMetaOAuthStates();
-  const pending = state && metaOAuthStates.get(state);
-  if (!pending) {
-    return res.status(400).send(oauthResultPage(false, "Session de connexion expirée ou invalide — recommencez depuis l'admin."));
-  }
-  metaOAuthStates.delete(state);
-
-  if (!code) {
-    return res.status(400).send(oauthResultPage(false, "Code d'autorisation manquant."));
-  }
-
+// POST /api/admin/tenants/:id/platform-connections/:platform/connect —
+// :platform est un segment d'URL OPAQUE pour compose (jamais interprété,
+// jamais validé ici : Pandore seul décide si la plateforme existe/supporte
+// la connexion — §6 du mandat H3-008D1J, "the platform identifier is
+// opaque to Compose"). Ne construit AUCUNE URL d'autorisation ici — le
+// payload (incl. authorization_url) est celui, tel quel, renvoyé par
+// Pandore.
+app.post('/api/admin/tenants/:id/platform-connections/:platform/connect', async (req, res) => {
+  if (!checkAdmin(req, res)) return;
+  const authorization = requirePandoreBearer(req, res);
+  if (!authorization) return;
   try {
-    const goRes = await fetch(`${PANDORE_API_BASE}/admin/social-accounts/oauth-callback`, {
+    const goRes = await fetch(`${PANDORE_API_BASE}/admin/tenants/${encodeURIComponent(req.params.id)}/platform-connections/${encodeURIComponent(req.params.platform)}/connect`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-internal-secret': GO_INTERNAL_SECRET },
-      body: JSON.stringify({ tenant_id: pending.tenantId, code, connected_by: pending.connectedBy }),
+      headers: { Authorization: authorization },
     });
-    const data = await goRes.json();
+    const data = await goRes.json().catch(() => ({}));
+    res.status(goRes.status).json(data);
+  } catch (err) {
+    console.error('platform-connections connect proxy:', err.message);
+    res.status(502).json({ error: 'Connexion impossible pour le moment' });
+  }
+});
+
+// GET/POST /oauth/platforms/:platform/callback — cible réelle de la
+// redirection depuis la plateforme externe (PANDORE_PUBLIC_BASE_URL +
+// ce chemin, voir internal/platform/facebook du repo pandore). PUBLIQUE
+// (aucun x-admin-password possible : c'est une navigation navigateur
+// depuis un tiers, jamais un fetch authentifié) — relais THIN GÉNÉRIQUE
+// uniquement : transmet la query string reçue telle quelle à Pandore, ne
+// lit/interprète/valide JAMAIS `code`/`state`/`error` lui-même (§3/§4 du
+// mandat : "must not interpret Meta semantics... generate/consume state").
+// La SEULE autorité de validation (state inconnu/expiré/déjà consommé,
+// plateforme incohérente) est la réponse HTTP de Pandore, relayée telle
+// quelle (statut + corps traduits en page de résultat sûre, jamais un
+// secret transmis).
+async function relayPlatformCallback(req, res) {
+  const platform = req.params.platform;
+  const query = req.method === 'GET' ? req.query : { ...req.query, ...(req.body || {}) };
+  const qs = new URLSearchParams(
+    Object.fromEntries(Object.entries(query).map(([k, v]) => [k, String(v)]))
+  ).toString();
+  res.set('Content-Type', 'text/html; charset=utf-8');
+  try {
+    const goRes = await fetch(`${PANDORE_API_BASE}/oauth/platforms/${encodeURIComponent(platform)}/callback?${qs}`);
+    const data = await goRes.json().catch(() => ({}));
     if (!goRes.ok) {
       const message = (data && data.error && data.error.message) || `Échec côté serveur (${goRes.status})`;
-      return res.status(goRes.status).send(oauthResultPage(false, message, [], pending.tenantId));
+      return res.status(goRes.status).send(platformCallbackResultPage(false, message));
     }
-    const names = Array.isArray(data) ? data.map((a) => `${a.Platform} · ${a.DisplayName}`) : [];
-    return res.send(oauthResultPage(true, null, names, pending.tenantId));
+    return res.status(200).send(platformCallbackResultPage(true, null, data));
   } catch (err) {
-    console.error('oauth meta callback:', err);
-    return res.status(502).send(oauthResultPage(false, 'Le serveur Pandore est injoignable pour le moment.', [], pending.tenantId));
+    console.error('platform callback relay:', err.message);
+    return res.status(502).send(platformCallbackResultPage(false, 'Le serveur Pandore est injoignable pour le moment.'));
+  }
+}
+app.get('/oauth/platforms/:platform/callback', relayPlatformCallback);
+app.post('/oauth/platforms/:platform/callback', relayPlatformCallback);
+
+// GET /api/admin/tenants/:id/platform-connections/:platform/:session/resources
+app.get('/api/admin/tenants/:id/platform-connections/:platform/:session/resources', async (req, res) => {
+  if (!checkAdmin(req, res)) return;
+  const authorization = requirePandoreBearer(req, res);
+  if (!authorization) return;
+  try {
+    const goRes = await fetch(`${PANDORE_API_BASE}/admin/tenants/${encodeURIComponent(req.params.id)}/platform-connections/${encodeURIComponent(req.params.platform)}/${encodeURIComponent(req.params.session)}/resources`, {
+      headers: { Authorization: authorization },
+    });
+    const data = await goRes.json().catch(() => ({}));
+    res.status(goRes.status).json(data);
+  } catch (err) {
+    console.error('platform-connections resources proxy:', err.message);
+    res.status(502).json({ error: 'Lecture impossible pour le moment' });
+  }
+});
+
+// POST /api/admin/tenants/:id/platform-connections/:platform/:session/select
+// — la SEULE route de ce bloc qui matérialise un SocialAccount, et
+// uniquement côté Pandore, après sélection EXPLICITE (jamais un
+// "connecter toutes les ressources" automatique — §6/§9 du mandat).
+app.post('/api/admin/tenants/:id/platform-connections/:platform/:session/select', async (req, res) => {
+  if (!checkAdmin(req, res)) return;
+  const authorization = requirePandoreBearer(req, res);
+  if (!authorization) return;
+  const { external_id: externalId } = req.body || {};
+  try {
+    const goRes = await fetch(`${PANDORE_API_BASE}/admin/tenants/${encodeURIComponent(req.params.id)}/platform-connections/${encodeURIComponent(req.params.platform)}/${encodeURIComponent(req.params.session)}/select`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: authorization },
+      body: JSON.stringify({ external_id: externalId || '' }),
+    });
+    const data = await goRes.json().catch(() => ({}));
+    if (!goRes.ok) return res.status(goRes.status).json(data);
+    // data est un core.SocialAccount Go brut (PascalCase, pas de tags
+    // JSON) — même traduction que toAdminSocialAccountView plus bas,
+    // réutilisée telle quelle (jamais une seconde règle de mapping).
+    res.status(goRes.status).json(toAdminSocialAccountView(data));
+  } catch (err) {
+    console.error('platform-connections select proxy:', err.message);
+    res.status(502).json({ error: 'Sélection impossible pour le moment' });
+  }
+});
+
+// --- H3-008D1K — Platform Integration Configuration (Niveau A) : relais
+// THIN GÉNÉRIQUE vers GET/PUT /admin/platform-integrations[/:platform]
+// (Go, H3-008D1G/H3-008D1I, déjà génériques et schema-driven — aucun champ
+// spécifique Facebook, aucun secret déchiffré n'est JAMAIS renvoyé par ces
+// routes Go, seulement une présence booléenne par clé SECRET). Même
+// identité Bearer relayée que platform-connections ci-dessus (F0.2) —
+// jamais x-internal-secret, jamais un compte de service. Ces DTOs Go
+// portent déjà des tags JSON snake_case (contrairement à core.SocialAccount) :
+// aucune fonction de traduction requise, relais direct du corps.
+app.get('/api/admin/platform-integrations', async (req, res) => {
+  if (!checkAdmin(req, res)) return;
+  const authorization = requirePandoreBearer(req, res);
+  if (!authorization) return;
+  try {
+    const goRes = await fetch(`${PANDORE_API_BASE}/admin/platform-integrations`, { headers: { Authorization: authorization } });
+    const data = await goRes.json().catch(() => ({}));
+    res.status(goRes.status).json(data);
+  } catch (err) {
+    console.error('platform-integrations list proxy:', err.message);
+    res.status(502).json({ error: 'Lecture impossible pour le moment' });
+  }
+});
+
+app.get('/api/admin/platform-integrations/:platform', async (req, res) => {
+  if (!checkAdmin(req, res)) return;
+  const authorization = requirePandoreBearer(req, res);
+  if (!authorization) return;
+  try {
+    const goRes = await fetch(`${PANDORE_API_BASE}/admin/platform-integrations/${encodeURIComponent(req.params.platform)}`, { headers: { Authorization: authorization } });
+    const data = await goRes.json().catch(() => ({}));
+    res.status(goRes.status).json(data);
+  } catch (err) {
+    console.error('platform-integrations detail proxy:', err.message);
+    res.status(502).json({ error: 'Lecture impossible pour le moment' });
+  }
+});
+
+// PUT — le corps (non_secret_config/secret_config/status/expected_version)
+// est transmis TEL QUEL : compose ne valide, n'interprète ni ne complète
+// JAMAIS ce corps (§3/§7 du mandat H3-008D1K, "Backend remains
+// authoritative" — la validation de schéma, la sémantique CAS et la
+// préservation des secrets omis restent ENTIÈREMENT côté Go, voir
+// internal/platformconfig.Save, repo pandore).
+app.put('/api/admin/platform-integrations/:platform', async (req, res) => {
+  if (!checkAdmin(req, res)) return;
+  const authorization = requirePandoreBearer(req, res);
+  if (!authorization) return;
+  try {
+    const goRes = await fetch(`${PANDORE_API_BASE}/admin/platform-integrations/${encodeURIComponent(req.params.platform)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: authorization },
+      body: JSON.stringify(req.body || {}),
+    });
+    const data = await goRes.json().catch(() => ({}));
+    res.status(goRes.status).json(data);
+  } catch (err) {
+    console.error('platform-integrations save proxy:', err.message);
+    res.status(502).json({ error: 'Enregistrement impossible pour le moment' });
   }
 });
 
@@ -789,5 +934,14 @@ app.get('/api/admin/platform-status', async (req, res) => {
 
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
-const PORT = process.env.PORT || 3400;
-app.listen(PORT, () => console.log(`compose service listening on ${PORT}`));
+// H3-008D1J — module.exports + garde require.main : permet à
+// test/platform-connections.test.js de charger `app` et de l'écouter sur
+// un port éphémère SANS démarrer un second serveur sur le port de
+// production — comportement de production strictement inchangé (`node
+// src/server.js` reste le seul point d'entrée réel, require.main ===
+// module y est toujours vrai).
+if (require.main === module) {
+  const PORT = process.env.PORT || 3400;
+  app.listen(PORT, () => console.log(`compose service listening on ${PORT}`));
+}
+module.exports = app;

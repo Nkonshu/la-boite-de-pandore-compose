@@ -1,0 +1,527 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Intégrations plateforme — La Boîte de Pandore</title>
+<meta name="robots" content="noindex">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg?v=2">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0B0D10;
+    --surface: #14171C;
+    --surface-raised: #1C2027;
+    --accent: #E8A33D;
+    --good: #3DBD8C;
+    --bad: #E2685A;
+    --text: #F3F1EC;
+    --mute: #8B909A;
+    --mute-dim: #5B616B;
+    --border: #262B33;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'IBM Plex Sans', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1, h2, h3 { font-family: 'Instrument Sans', 'IBM Plex Sans', sans-serif; margin: 0; }
+  a { color: var(--accent); }
+
+  .gate { min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+  .gate-box { width: 100%; max-width: 360px; padding: 24px; }
+  .gate-box h1 { font-size: 22px; margin-bottom: 20px; }
+  .gate-box input {
+    width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 13px 14px; color: var(--text); font-family: inherit; font-size: 15px; margin-bottom: 14px;
+  }
+  .gate-box input:focus { outline: none; border-color: var(--accent); }
+  .gate-box .err { color: var(--bad); font-size: 13px; margin-bottom: 12px; display: none; }
+  .gate-box .err.show { display: block; }
+
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    background: var(--accent); color: #201404; font-weight: 700; font-size: 14px;
+    padding: 11px 22px; border-radius: 999px; border: none; cursor: pointer;
+  }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--text); font-weight: 600; }
+  .btn-sm { padding: 6px 14px; font-size: 12.5px; }
+
+  #dashboard { display: none; }
+  #dashboard.show { display: block; }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 40px 24px 90px; }
+  .topbar { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 12px; }
+  .topbar h1 { font-size: 24px; font-weight: 700; }
+  .topbar .sub { font-size: 13px; color: var(--mute-dim); }
+
+  .panel { margin-bottom: 32px; }
+  .panel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .panel h2 {
+    font-family: 'IBM Plex Mono', monospace; font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--accent);
+  }
+
+  .platform-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; margin-bottom: 10px;
+  }
+  .platform-row .name { font-size: 14.5px; font-weight: 600; }
+  .platform-row .id { font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; color: var(--mute-dim); }
+
+  .pill { display: inline-block; font-family: 'IBM Plex Mono', monospace; font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 999px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .pill.configured { background: rgba(61,189,140,0.14); color: var(--good); }
+  .pill.unconfigured { background: rgba(139,144,154,0.14); color: var(--mute); }
+  .pill.disabled { background: rgba(226,104,90,0.14); color: var(--bad); }
+
+  .field { margin-bottom: 16px; }
+  .field label { display: block; font-size: 12.5px; color: var(--mute); margin-bottom: 6px; }
+  .field label .req { color: var(--bad); }
+  .field input, .field select {
+    width: 100%; background: var(--surface-raised); border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px 12px; color: var(--text); font-family: inherit; font-size: 14px;
+  }
+  .field input:focus, .field select:focus { outline: none; border-color: var(--accent); }
+  .field .help { font-size: 11.5px; color: var(--mute-dim); margin-top: 4px; }
+  .field .secret-state { font-size: 11.5px; margin-top: 4px; }
+  .field .secret-state.set { color: var(--good); }
+  .field .secret-state.unset { color: var(--bad); }
+
+  .form-box { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+  .msg { font-size: 13px; margin-top: 10px; }
+  .msg.err { color: var(--bad); }
+  .msg.ok { color: var(--good); }
+  .msg.warn { color: var(--accent); }
+</style>
+</head>
+<body>
+
+<div class="gate" id="gate">
+  <div class="gate-box">
+    <h1>Administration — La Boîte de Pandore</h1>
+    <input type="password" id="pwInput" placeholder="Mot de passe" autocomplete="current-password">
+    <div class="err" id="gateErr">Mot de passe incorrect.</div>
+    <button class="btn" id="loginBtn" style="width:100%">Se connecter</button>
+  </div>
+</div>
+
+<div id="dashboard">
+  <div class="wrap">
+    <div id="pandoreSessionBar" style="margin-bottom:24px;padding:10px 14px;background:var(--surface);border:1px solid var(--border);border-radius:10px;font-size:13px;"></div>
+
+    <div class="topbar">
+      <div>
+        <h1>Intégrations plateforme</h1>
+        <div class="sub"><a href="/admin/index.html">← Contacts &amp; audits</a></div>
+      </div>
+      <button class="btn btn-ghost btn-sm" id="refreshBtn">Rafraîchir</button>
+    </div>
+
+    <!-- H3-008D1K — catalogue GÉNÉRIQUE : chaque ligne vient de
+         GET /api/admin/platform-integrations (Registry Pandore), jamais un
+         nom de plateforme codé en dur dans ce fichier. -->
+    <div class="panel">
+      <div class="panel-head"><h2>Plateformes enregistrées</h2></div>
+      <div id="platformList"><div class="msg">Connectez-vous avec une session Pandore ci-dessus.</div></div>
+    </div>
+
+    <div class="panel" id="configPanel" style="display:none;">
+      <div class="panel-head"><h2 id="configPanelTitle">Configuration</h2></div>
+      <div class="form-box">
+        <div id="configFields"></div>
+        <div class="field">
+          <label for="statusSelect">Statut</label>
+          <select id="statusSelect">
+            <option value="ACTIVE">ACTIVE</option>
+            <option value="DISABLED">DISABLED</option>
+          </select>
+        </div>
+        <button class="btn" id="saveConfigBtn">Enregistrer</button>
+        <button class="btn btn-ghost" id="cancelConfigBtn" type="button">Fermer</button>
+        <div class="msg" id="configMsg"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const PW_KEY = 'pandore_admin_pw';
+// F0.2 — même pont d'identité que social-accounts.html/audit-review.html
+// (repo compose) : ADMIN_PASSWORD reste la porte d'accès à cette page,
+// PANDORE_SESSION_KEY est l'identité Pandore réelle (User/Session/Role),
+// seule source d'autorisation pour lire/écrire une configuration de
+// plateforme (SUPER_ADMIN uniquement, appliqué côté Go).
+const PANDORE_SESSION_KEY = 'pandore_session';
+
+function esc(s){
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function getPandoreSession(){
+  try{ return JSON.parse(sessionStorage.getItem(PANDORE_SESSION_KEY) || 'null'); }
+  catch{ return null; }
+}
+function setPandoreSession(session){
+  sessionStorage.setItem(PANDORE_SESSION_KEY, JSON.stringify(session));
+}
+function clearPandoreSession(){
+  sessionStorage.removeItem(PANDORE_SESSION_KEY);
+}
+
+function renderSessionBar(){
+  const bar = document.getElementById('pandoreSessionBar');
+  if(!bar) return;
+  const session = getPandoreSession();
+  if(session && session.token){
+    bar.innerHTML = `
+      Connecté en tant que : <b>${esc(session.user.email)}</b> (${esc(session.user.role)})
+      <button class="btn btn-ghost btn-sm" id="pandoreLogoutBtn" style="margin-left:10px;">Déconnexion</button>
+    `;
+    document.getElementById('pandoreLogoutBtn').addEventListener('click', pandoreLogout);
+    loadPlatformList();
+  } else {
+    bar.innerHTML = `
+      <div style="margin-bottom:6px;color:var(--mute,#8B909A);">Session Pandore requise pour lire/configurer les intégrations plateforme (rôle PANDORE_SUPER_ADMIN, identité distincte du mot de passe d'accès à cette page).</div>
+      <input type="email" id="pandoreEmail" placeholder="email Pandore" style="margin-right:6px;">
+      <input type="password" id="pandorePassword" placeholder="mot de passe" style="margin-right:6px;">
+      <button class="btn btn-sm" id="pandoreLoginBtn">Connexion Pandore</button>
+      <div class="err show" id="pandoreLoginErr" style="display:none;margin-top:6px;"></div>
+    `;
+    document.getElementById('pandoreLoginBtn').addEventListener('click', pandoreLogin);
+    document.getElementById('platformList').innerHTML = '<div class="msg">Connectez-vous avec une session Pandore ci-dessus.</div>';
+    document.getElementById('configPanel').style.display = 'none';
+  }
+}
+
+async function pandoreLogin(){
+  const email = document.getElementById('pandoreEmail').value.trim();
+  const password = document.getElementById('pandorePassword').value;
+  const errEl = document.getElementById('pandoreLoginErr');
+  errEl.style.display = 'none';
+  try{
+    const res = await api('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    const data = await res.json();
+    if(!res.ok){
+      errEl.textContent = (data.error && data.error.message) || 'Connexion Pandore refusée.';
+      errEl.style.display = 'block';
+      return;
+    }
+    setPandoreSession({ token: data.token, user: data.user });
+    renderSessionBar();
+  }catch(err){
+    errEl.textContent = 'Connexion Pandore impossible.';
+    errEl.style.display = 'block';
+  }
+}
+
+async function pandoreLogout(){
+  const session = getPandoreSession();
+  clearPandoreSession();
+  renderSessionBar();
+  if(session && session.token){
+    try{ await api('/api/auth/logout', { method: 'POST', headers: { Authorization: `Bearer ${session.token}` } }); }
+    catch{ /* déconnexion locale déjà faite */ }
+  }
+}
+
+async function api(path, opts = {}){
+  const pw = localStorage.getItem(PW_KEY) || '';
+  const res = await fetch(path, { ...opts, headers: { ...(opts.headers || {}), 'x-admin-password': pw } });
+  if(res.status === 401 && !opts.__pandoreAuth){
+    localStorage.removeItem(PW_KEY);
+    showGate(true);
+    throw new Error('unauthorized');
+  }
+  return res;
+}
+
+// apiWithPandoreSession — exige EN PLUS un Bearer Pandore réel (jamais un
+// compte de service compose, voir F0.2 déjà établi ailleurs dans ce
+// dépôt). Un 401 ici signifie "session Pandore expirée", jamais "mot de
+// passe admin incorrect" : efface UNIQUEMENT PANDORE_SESSION_KEY.
+async function apiWithPandoreSession(path, opts = {}){
+  const session = getPandoreSession();
+  if(!session || !session.token){
+    throw new Error('Session Pandore requise.');
+  }
+  const pw = localStorage.getItem(PW_KEY) || '';
+  const res = await fetch(path, {
+    ...opts,
+    headers: { ...(opts.headers || {}), 'x-admin-password': pw, Authorization: `Bearer ${session.token}` },
+  });
+  if(res.status === 401){
+    clearPandoreSession();
+    renderSessionBar();
+    throw new Error('Session Pandore expirée — reconnectez-vous.');
+  }
+  const data = await res.json().catch(() => ({}));
+  return { status: res.status, ok: res.ok, data };
+}
+
+function showGate(withError){
+  document.getElementById('gate').style.display = 'flex';
+  document.getElementById('dashboard').classList.remove('show');
+  document.getElementById('gateErr').classList.toggle('show', !!withError);
+}
+function showDashboard(){
+  document.getElementById('gate').style.display = 'none';
+  document.getElementById('dashboard').classList.add('show');
+  renderSessionBar();
+}
+
+document.getElementById('loginBtn').addEventListener('click', tryLogin);
+document.getElementById('pwInput').addEventListener('keydown', (e) => { if(e.key === 'Enter') tryLogin(); });
+document.getElementById('refreshBtn').addEventListener('click', loadPlatformList);
+document.getElementById('cancelConfigBtn').addEventListener('click', () => { document.getElementById('configPanel').style.display = 'none'; });
+
+async function tryLogin(){
+  const pw = document.getElementById('pwInput').value;
+  localStorage.setItem(PW_KEY, pw);
+  try{
+    await api('/api/admin/contacts');
+    showDashboard();
+  }catch(err){
+    showGate(true);
+  }
+}
+
+// --- H3-008D1K — catalogue générique ---
+
+async function loadPlatformList(){
+  const container = document.getElementById('platformList');
+  container.innerHTML = '<div class="msg">Chargement...</div>';
+  try{
+    const { ok, data, status } = await apiWithPandoreSession('/api/admin/platform-integrations');
+    if(!ok){
+      container.innerHTML = `<div class="msg err">${esc((data.error && data.error.message) || 'Erreur ' + status)}</div>`;
+      return;
+    }
+    if(!Array.isArray(data) || data.length === 0){
+      container.innerHTML = '<div class="msg">Aucun adaptateur de plateforme enregistré.</div>';
+      return;
+    }
+    container.innerHTML = data.map(p => `
+      <div class="platform-row">
+        <div>
+          <div class="name">${esc(p.display_name)}</div>
+          <div class="id">${esc(p.platform_id)}</div>
+        </div>
+        <div>
+          ${platformStatusPill(p)}
+          <button class="btn btn-sm" data-platform="${esc(p.platform_id)}" style="margin-left:8px;">${p.configured ? 'Modifier' : 'Configurer'}</button>
+        </div>
+      </div>
+    `).join('');
+    container.querySelectorAll('button[data-platform]').forEach(btn => {
+      btn.addEventListener('click', () => openConfigForm(btn.getAttribute('data-platform')));
+    });
+  }catch(err){
+    container.innerHTML = `<div class="msg err">${esc(err.message)}</div>`;
+  }
+}
+
+// platformStatusPill — GÉNÉRIQUE : dérivée uniquement de
+// configured/status, jamais du platform_id (§2 du mandat : pas de switch
+// par nom de plateforme).
+function platformStatusPill(p){
+  if(!p.configured) return '<span class="pill unconfigured">non configuré</span>';
+  if(p.status === 'DISABLED') return '<span class="pill disabled">désactivé</span>';
+  return '<span class="pill configured">configuré</span>';
+}
+
+// --- H3-008D1K — formulaire générique, rendu depuis
+// configuration_schema. AUCUNE branche par platform_id : renderConfigField
+// ne connaît que Kind (TEXT/SECRET/URL/BOOLEAN/SELECT). ---
+
+function inputTypeForKind(kind){
+  if(kind === 'URL') return 'url';
+  if(kind === 'SECRET') return 'password';
+  return 'text';
+}
+
+// renderConfigField — fonction PURE (aucun accès DOM), extraite et testée
+// directement par test/platform-integrations-ui.test.js (§11 du mandat :
+// preuve d'extensibilité générique au-delà de Facebook). Ne reçoit ni ne
+// produit JAMAIS la valeur secrète elle-même — uniquement `secretIsSet`
+// (booléen de présence, jamais la valeur).
+function renderConfigField(field, currentValue, secretIsSet){
+  const req = field.required ? ' <span class="req">*</span>' : '';
+  const help = field.help_text ? `<div class="help">${esc(field.help_text)}</div>` : '';
+  const inputId = 'cfgfield_' + field.key;
+
+  if(field.kind === 'SECRET'){
+    const stateClass = secretIsSet ? 'set' : 'unset';
+    const stateText = secretIsSet ? 'Secret défini (valeur non affichée).' : 'Secret non défini.';
+    const placeholder = secretIsSet ? 'laisser vide pour conserver la valeur actuelle' : 'requis';
+    return `<div class="field">
+      <label for="${inputId}">${esc(field.label)}${req}</label>
+      <input type="password" id="${inputId}" data-key="${esc(field.key)}" data-kind="SECRET" autocomplete="new-password" placeholder="${esc(placeholder)}">
+      <div class="secret-state ${stateClass}">${stateText}</div>
+      ${help}
+    </div>`;
+  }
+
+  if(field.kind === 'BOOLEAN'){
+    const val = currentValue === 'true' ? 'true' : (currentValue === 'false' ? 'false' : '');
+    return `<div class="field">
+      <label for="${inputId}">${esc(field.label)}${req}</label>
+      <select id="${inputId}" data-key="${esc(field.key)}" data-kind="BOOLEAN">
+        <option value="" ${val === '' ? 'selected' : ''}>—</option>
+        <option value="true" ${val === 'true' ? 'selected' : ''}>true</option>
+        <option value="false" ${val === 'false' ? 'selected' : ''}>false</option>
+      </select>
+      ${help}
+    </div>`;
+  }
+
+  if(field.kind === 'SELECT'){
+    const options = (field.options || []).map(o => `<option value="${esc(o)}" ${o === currentValue ? 'selected' : ''}>${esc(o)}</option>`).join('');
+    return `<div class="field">
+      <label for="${inputId}">${esc(field.label)}${req}</label>
+      <select id="${inputId}" data-key="${esc(field.key)}" data-kind="SELECT">
+        <option value="">—</option>
+        ${options}
+      </select>
+      ${help}
+    </div>`;
+  }
+
+  // TEXT / URL
+  return `<div class="field">
+    <label for="${inputId}">${esc(field.label)}${req}</label>
+    <input type="${inputTypeForKind(field.kind)}" id="${inputId}" data-key="${esc(field.key)}" data-kind="${esc(field.kind)}" value="${esc(currentValue || '')}">
+    ${help}
+  </div>`;
+}
+
+// buildConfigFormHTML — fonction PURE, assemble renderConfigField pour
+// chaque champ du schéma, dans l'ordre déclaré par l'adaptateur.
+function buildConfigFormHTML(schema, detail){
+  const nonSecret = (detail && detail.non_secret_config) || {};
+  const secretsSet = (detail && detail.secret_fields_set) || {};
+  return schema.map(f => renderConfigField(f, nonSecret[f.key], !!secretsSet[f.key])).join('');
+}
+
+let currentConfigPlatform = null;
+let currentConfigDetail = null;
+
+async function openConfigForm(platformId){
+  const panel = document.getElementById('configPanel');
+  const msgEl = document.getElementById('configMsg');
+  msgEl.className = 'msg';
+  msgEl.textContent = '';
+  panel.style.display = 'block';
+  document.getElementById('configPanelTitle').textContent = 'Chargement...';
+  document.getElementById('configFields').innerHTML = '';
+  try{
+    const { ok, data, status } = await apiWithPandoreSession(`/api/admin/platform-integrations/${encodeURIComponent(platformId)}`);
+    if(!ok){
+      document.getElementById('configPanelTitle').textContent = 'Erreur';
+      msgEl.className = 'msg err';
+      msgEl.textContent = (data.error && data.error.message) || `Erreur ${status}`;
+      return;
+    }
+    currentConfigPlatform = platformId;
+    currentConfigDetail = data;
+    document.getElementById('configPanelTitle').textContent = `${data.display_name} (${data.platform_id})`;
+    document.getElementById('configFields').innerHTML = buildConfigFormHTML(data.configuration_schema || [], data);
+    document.getElementById('statusSelect').value = data.status || 'ACTIVE';
+  }catch(err){
+    document.getElementById('configPanelTitle').textContent = 'Erreur';
+    msgEl.className = 'msg err';
+    msgEl.textContent = err.message;
+  }
+}
+
+document.getElementById('saveConfigBtn').addEventListener('click', saveConfig);
+
+// saveConfig — §4/§6/§7 du mandat H3-008D1K :
+//   - un champ SECRET laissé vide N'EST JAMAIS envoyé (préservation par
+//     Go, jamais recréée ici) ;
+//   - TOUS les champs non-secrets sont envoyés à chaque sauvegarde (Go ne
+//     fusionne jamais les valeurs non-secrètes avec l'existant — omettre
+//     un champ non-secret requis serait rejeté, jamais silencieusement
+//     préservé) ;
+//   - expected_version n'est envoyé QUE si la plateforme était déjà
+//     configurée (sinon Go refuse une création avec une version) ;
+//   - un 409 (CAS) affiche un message de conflit sûr et exige un
+//     rechargement explicite — JAMAIS de nouvelle tentative automatique ;
+//   - après succès, les champs SECRET sont vidés du DOM (jamais conservés
+//     dans le navigateur — voir §4, "clear secret input... as practical").
+async function saveConfig(){
+  const msgEl = document.getElementById('configMsg');
+  msgEl.className = 'msg';
+  msgEl.textContent = '';
+  if(!currentConfigPlatform || !currentConfigDetail) return;
+
+  const nonSecretConfig = {};
+  const secretConfig = {};
+  document.querySelectorAll('#configFields [data-key]').forEach(el => {
+    const key = el.getAttribute('data-key');
+    const kind = el.getAttribute('data-kind');
+    if(kind === 'SECRET'){
+      if(el.value !== '') secretConfig[key] = el.value;
+      return;
+    }
+    nonSecretConfig[key] = el.value;
+  });
+
+  const body = { non_secret_config: nonSecretConfig, secret_config: secretConfig, status: document.getElementById('statusSelect').value };
+  if(currentConfigDetail.configured){
+    body.expected_version = currentConfigDetail.version;
+  }
+
+  try{
+    const { status, ok, data } = await apiWithPandoreSession(`/api/admin/platform-integrations/${encodeURIComponent(currentConfigPlatform)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if(status === 409){
+      msgEl.className = 'msg warn';
+      msgEl.textContent = 'Un autre administrateur a modifié cette configuration entre-temps. Rechargez avant de réessayer.';
+      return;
+    }
+    if(!ok){
+      msgEl.className = 'msg err';
+      msgEl.textContent = (data.error && data.error.message) || `Erreur ${status}`;
+      return;
+    }
+    // Succès : jamais de secret conservé dans le DOM/état navigateur.
+    document.querySelectorAll('#configFields input[data-kind="SECRET"]').forEach(el => { el.value = ''; });
+    currentConfigDetail = data;
+    document.getElementById('configFields').innerHTML = buildConfigFormHTML(data.configuration_schema || [], data);
+    document.getElementById('statusSelect').value = data.status || 'ACTIVE';
+    msgEl.className = 'msg ok';
+    msgEl.textContent = 'Configuration enregistrée.';
+    loadPlatformList();
+  }catch(err){
+    msgEl.className = 'msg err';
+    msgEl.textContent = err.message;
+  }
+}
+
+(async function init(){
+  if(localStorage.getItem(PW_KEY)){
+    try{
+      await api('/api/admin/contacts');
+      showDashboard();
+    }catch(err){
+      showGate(false);
+    }
+  } else {
+    showGate(false);
+  }
+})();
+</script>
+</body>
+</html>

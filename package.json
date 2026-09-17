@@ -5,7 +5,7 @@
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
-    "test": "node test/plan-decision.test.js"
+    "test": "node test/plan-decision.test.js && node test/platform-connections.test.js && node test/platform-integrations-relay.test.js && node test/platform-integrations-ui.test.js"
   },
   "dependencies": {
     "express": "^4.19.2"

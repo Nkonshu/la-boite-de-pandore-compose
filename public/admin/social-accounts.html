@@ -96,6 +96,15 @@
   .msg { font-size: 13px; margin-top: 10px; }
   .msg.err { color: var(--bad); }
   .msg.ok { color: var(--good); }
+
+  .platform-buttons { display: flex; flex-wrap: wrap; gap: 10px; }
+  .resource-list { display: flex; flex-direction: column; gap: 8px; }
+  .resource-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px;
+  }
+  .resource-row .name { font-size: 13.5px; }
+  .resource-row .id { font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; color: var(--mute-dim); }
 </style>
 </head>
 <body>
@@ -111,6 +120,8 @@
 
 <div id="dashboard">
   <div class="wrap">
+    <div id="pandoreSessionBar" style="margin-bottom:24px;padding:10px 14px;background:var(--surface);border:1px solid var(--border);border-radius:10px;font-size:13px;"></div>
+
     <div class="topbar">
       <div>
         <h1>Comptes sociaux</h1>
@@ -125,10 +136,34 @@
       <button class="btn btn-ghost btn-sm" id="loadTenantBtn">Charger</button>
     </div>
 
+    <!-- H3-008D1J — Connexion de plateforme GÉNÉRIQUE : les boutons ci-dessous
+         sont générés depuis GET .../platform-connections/available (Registry
+         Pandore), jamais un bouton Facebook codé en dur dans ce fichier. -->
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Connecter une plateforme</h2>
+      </div>
+      <div class="platform-buttons" id="platformButtons">
+        <span class="msg">Connectez-vous avec une session Pandore ci-dessus pour voir les plateformes disponibles.</span>
+      </div>
+      <div class="msg" id="connectMsg"></div>
+    </div>
+
+    <!-- H3-008D1J — sélection de ressource : affichée uniquement au retour
+         d'une autorisation externe (?platform=&session= posés par la page de
+         résultat du callback générique). Jamais de connexion automatique de
+         toutes les ressources — le choix reste explicite (§6/§9 du mandat). -->
+    <div class="panel" id="resourceSelectionPanel" style="display:none;">
+      <div class="panel-head">
+        <h2>Choisir la ressource à connecter</h2>
+      </div>
+      <div class="resource-list" id="resourceList"></div>
+      <div class="msg" id="resourceMsg"></div>
+    </div>
+
     <div class="panel">
       <div class="panel-head">
         <h2>Comptes connectés</h2>
-        <button class="btn btn-sm" id="connectBtn">Connecter Facebook / Instagram</button>
       </div>
       <div class="table-scroll">
         <table id="accountsTable">
@@ -143,15 +178,103 @@
 
 <script>
 const PW_KEY = 'pandore_admin_pw';
+// F0.2 — même pont d'identité que audit-review.html (repo compose) :
+// ADMIN_PASSWORD reste la porte d'accès à cette page, PANDORE_SESSION_KEY
+// est l'identité Pandore réelle (User/Session/Role), seule source
+// d'autorisation pour initier/finaliser une connexion de plateforme.
+// sessionStorage (pas localStorage) : ce Bearer ne survit pas à la
+// fermeture de l'onglet.
+const PANDORE_SESSION_KEY = 'pandore_session';
+// H3-008D1J — stash générique posé juste avant de quitter cette page vers
+// la plateforme externe, relu par la page de résultat du callback
+// (platformCallbackResultPage, repo compose src/server.js) pour reformer
+// le lien de retour vers l'étape de sélection de ressource. Jamais un
+// secret : seulement tenant_id/platform/session_ref, des valeurs déjà
+// choisies par cet admin.
+const PENDING_CONNECTION_KEY = 'pandore_pending_connection';
 
 function esc(s){
-  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 function fmtDate(iso){
   if(!iso) return '';
   return new Date(iso).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' });
 }
 
+function getPandoreSession(){
+  try{ return JSON.parse(sessionStorage.getItem(PANDORE_SESSION_KEY) || 'null'); }
+  catch{ return null; }
+}
+function setPandoreSession(session){
+  sessionStorage.setItem(PANDORE_SESSION_KEY, JSON.stringify(session));
+}
+function clearPandoreSession(){
+  sessionStorage.removeItem(PANDORE_SESSION_KEY);
+}
+
+function renderSessionBar(){
+  const bar = document.getElementById('pandoreSessionBar');
+  if(!bar) return;
+  const session = getPandoreSession();
+  if(session && session.token){
+    bar.innerHTML = `
+      Connecté en tant que : <b>${esc(session.user.email)}</b> (${esc(session.user.role)})
+      <button class="btn btn-ghost btn-sm" id="pandoreLogoutBtn" style="margin-left:10px;">Déconnexion</button>
+    `;
+    document.getElementById('pandoreLogoutBtn').addEventListener('click', pandoreLogout);
+    loadPlatformButtons();
+  } else {
+    bar.innerHTML = `
+      <div style="margin-bottom:6px;color:var(--mute,#8B909A);">Session Pandore requise pour connecter/sélectionner une plateforme (identité distincte du mot de passe d'accès à cette page).</div>
+      <input type="email" id="pandoreEmail" placeholder="email Pandore" style="margin-right:6px;">
+      <input type="password" id="pandorePassword" placeholder="mot de passe" style="margin-right:6px;">
+      <button class="btn btn-sm" id="pandoreLoginBtn">Connexion Pandore</button>
+      <div class="err show" id="pandoreLoginErr" style="display:none;margin-top:6px;"></div>
+    `;
+    document.getElementById('pandoreLoginBtn').addEventListener('click', pandoreLogin);
+    document.getElementById('platformButtons').innerHTML = '<span class="msg">Connectez-vous avec une session Pandore ci-dessus pour voir les plateformes disponibles.</span>';
+  }
+}
+
+async function pandoreLogin(){
+  const email = document.getElementById('pandoreEmail').value.trim();
+  const password = document.getElementById('pandorePassword').value;
+  const errEl = document.getElementById('pandoreLoginErr');
+  errEl.style.display = 'none';
+  try{
+    const res = await api('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    const data = await res.json();
+    if(!res.ok){
+      errEl.textContent = (data.error && data.error.message) || 'Connexion Pandore refusée.';
+      errEl.style.display = 'block';
+      return;
+    }
+    setPandoreSession({ token: data.token, user: data.user });
+    renderSessionBar();
+  }catch(err){
+    errEl.textContent = 'Connexion Pandore impossible.';
+    errEl.style.display = 'block';
+  }
+}
+
+async function pandoreLogout(){
+  const session = getPandoreSession();
+  clearPandoreSession();
+  renderSessionBar();
+  if(session && session.token){
+    try{ await api('/api/auth/logout', { method: 'POST', headers: { Authorization: `Bearer ${session.token}` } }); }
+    catch{ /* déconnexion locale déjà faite, un échec réseau ici n'est pas bloquant */ }
+  }
+}
+
+// api — même patron que partout ailleurs dans ce dépôt : x-admin-password
+// systématique, 401 renvoie à la porte legacy. N'attache JAMAIS le Bearer
+// Pandore lui-même (routes différentes selon le besoin) — voir
+// apiWithPandoreSession ci-dessous pour celles qui l'exigent.
 async function api(path, opts = {}){
   const pw = localStorage.getItem(PW_KEY) || '';
   const res = await fetch(path, {
@@ -162,6 +285,29 @@ async function api(path, opts = {}){
     localStorage.removeItem(PW_KEY);
     showGate(true);
     throw new Error('unauthorized');
+  }
+  return res;
+}
+
+// apiWithPandoreSession — pour les routes /platform-connections/* qui
+// exigent EN PLUS un Bearer Pandore réel (jamais un compte de service
+// compose, voir F0.2). Un 401 ici signifie "session Pandore expirée" —
+// jamais "mot de passe admin incorrect" — donc efface UNIQUEMENT
+// PANDORE_SESSION_KEY, jamais PW_KEY.
+async function apiWithPandoreSession(path, opts = {}){
+  const session = getPandoreSession();
+  if(!session || !session.token){
+    throw new Error('Session Pandore requise.');
+  }
+  const pw = localStorage.getItem(PW_KEY) || '';
+  const res = await fetch(path, {
+    ...opts,
+    headers: { ...(opts.headers || {}), 'x-admin-password': pw, Authorization: `Bearer ${session.token}` },
+  });
+  if(res.status === 401){
+    clearPandoreSession();
+    renderSessionBar();
+    throw new Error('Session Pandore expirée — reconnectez-vous.');
   }
   const data = await res.json().catch(() => ({}));
   if(!res.ok){
@@ -180,12 +326,14 @@ function showGate(withError){
 function showDashboard(){
   document.getElementById('gate').style.display = 'none';
   document.getElementById('dashboard').classList.add('show');
+  renderSessionBar();
   const params = new URLSearchParams(location.search);
   const tenantId = params.get('tenant_id');
   if(tenantId){
     document.getElementById('tenantInput').value = tenantId;
     refresh();
   }
+  maybeShowResourceSelection(params);
 }
 
 document.getElementById('loginBtn').addEventListener('click', tryLogin);
@@ -212,31 +360,133 @@ function currentTenantId(){
 document.getElementById('loadTenantBtn').addEventListener('click', refresh);
 document.getElementById('tenantInput').addEventListener('keydown', (e) => { if(e.key === 'Enter') refresh(); });
 
-document.getElementById('connectBtn').addEventListener('click', connectMeta);
+// --- H3-008D1J — connexion de plateforme générique ---
 
-async function connectMeta(){
+async function loadPlatformButtons(){
+  const container = document.getElementById('platformButtons');
   const tenantId = currentTenantId();
-  const msgEl = document.getElementById('actionMsg');
+  if(!tenantId){
+    container.innerHTML = '<span class="msg">Renseignez un tenant_id ci-dessus pour voir les plateformes disponibles.</span>';
+    return;
+  }
+  try{
+    const platforms = await apiWithPandoreSession(`/api/admin/tenants/${encodeURIComponent(tenantId)}/platform-connections/available`);
+    if(!Array.isArray(platforms) || platforms.length === 0){
+      container.innerHTML = '<span class="msg">Aucune plateforme disponible (aucun adaptateur avec support de connexion enregistré).</span>';
+      return;
+    }
+    container.innerHTML = platforms.map(p => `
+      <button class="btn btn-sm" data-platform="${esc(p.platform_id)}">Connecter ${esc(p.display_name)}</button>
+    `).join('');
+    container.querySelectorAll('button[data-platform]').forEach(btn => {
+      btn.addEventListener('click', () => connectPlatform(btn.getAttribute('data-platform')));
+    });
+  }catch(err){
+    container.innerHTML = `<span class="msg err">${esc(err.message)}</span>`;
+  }
+}
+document.getElementById('loadTenantBtn').addEventListener('click', loadPlatformButtons);
+
+// connectPlatform — GÉNÉRIQUE : `platform` est passé tel quel à Pandore,
+// jamais interprété ici. Ne construit AUCUNE URL d'autorisation —
+// `data.payload.authorization_url` est celle renvoyée par Pandore, relayée
+// par compose sans modification (voir src/server.js, POST
+// /api/admin/tenants/:id/platform-connections/:platform/connect).
+async function connectPlatform(platform){
+  const tenantId = currentTenantId();
+  const msgEl = document.getElementById('connectMsg');
   msgEl.className = 'msg';
   msgEl.textContent = '';
   if(!tenantId){
     msgEl.className = 'msg err';
-    msgEl.textContent = 'Renseignez un tenant_id avant de connecter un compte.';
+    msgEl.textContent = 'Renseignez un tenant_id avant de connecter une plateforme.';
     return;
   }
   try{
-    const pw = localStorage.getItem(PW_KEY) || '';
-    const res = await fetch(`/api/admin/social-accounts/meta/authorize-url?tenant_id=${encodeURIComponent(tenantId)}`, {
-      headers: { 'x-admin-password': pw },
-    });
-    const data = await res.json();
-    if(!res.ok) throw new Error(data.error || `Erreur ${res.status}`);
-    location.href = data.url;
+    const data = await apiWithPandoreSession(`/api/admin/tenants/${encodeURIComponent(tenantId)}/platform-connections/${encodeURIComponent(platform)}/connect`, { method: 'POST' });
+    if(!data || !data.payload || !data.payload.authorization_url){
+      throw new Error('réponse de connexion inattendue (authorization_url absente)');
+    }
+    // Stash AVANT de quitter cette page — seul moyen de retrouver
+    // tenant_id/platform/session au retour d'un aller-retour vers un
+    // domaine tiers (voir platformCallbackResultPage, repo compose).
+    sessionStorage.setItem(PENDING_CONNECTION_KEY, JSON.stringify({ tenantId, platform, sessionRef: data.session_ref }));
+    location.href = data.payload.authorization_url;
   }catch(err){
     msgEl.className = 'msg err';
     msgEl.textContent = err.message;
   }
 }
+
+// --- H3-008D1J — sélection de ressource au retour d'autorisation ---
+
+function maybeShowResourceSelection(params){
+  const platform = params.get('platform');
+  const session = params.get('session');
+  const tenantId = params.get('tenant_id') || currentTenantId();
+  if(!platform || !session || !tenantId) return;
+  document.getElementById('resourceSelectionPanel').style.display = 'block';
+  loadResources(tenantId, platform, session);
+}
+
+async function loadResources(tenantId, platform, session){
+  const listEl = document.getElementById('resourceList');
+  const msgEl = document.getElementById('resourceMsg');
+  msgEl.className = 'msg';
+  msgEl.textContent = '';
+  listEl.innerHTML = '<div class="msg">Chargement des ressources...</div>';
+  try{
+    const resources = await apiWithPandoreSession(`/api/admin/tenants/${encodeURIComponent(tenantId)}/platform-connections/${encodeURIComponent(platform)}/${encodeURIComponent(session)}/resources`);
+    if(!Array.isArray(resources) || resources.length === 0){
+      listEl.innerHTML = '<div class="msg">Aucune ressource découverte pour cette autorisation.</div>';
+      return;
+    }
+    // Jamais de sélection automatique même s'il n'y en a qu'une seule —
+    // le choix reste un clic explicite (§9 du mandat H3-008D1I/J).
+    listEl.innerHTML = resources.map(r => `
+      <div class="resource-row">
+        <div>
+          <div class="name">${esc(r.display_name || r.external_id)}</div>
+          <div class="id">${esc(r.external_id)}</div>
+        </div>
+        <button class="btn btn-sm" data-external-id="${esc(r.external_id)}">Connecter cette ressource</button>
+      </div>
+    `).join('');
+    listEl.querySelectorAll('button[data-external-id]').forEach(btn => {
+      btn.addEventListener('click', () => selectResource(tenantId, platform, session, btn.getAttribute('data-external-id')));
+    });
+  }catch(err){
+    listEl.innerHTML = '';
+    msgEl.className = 'msg err';
+    msgEl.textContent = err.message;
+  }
+}
+
+async function selectResource(tenantId, platform, session, externalId){
+  const msgEl = document.getElementById('resourceMsg');
+  try{
+    await apiWithPandoreSession(`/api/admin/tenants/${encodeURIComponent(tenantId)}/platform-connections/${encodeURIComponent(platform)}/${encodeURIComponent(session)}/select`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ external_id: externalId }),
+    });
+    msgEl.className = 'msg ok';
+    msgEl.textContent = 'Ressource connectée.';
+    document.getElementById('resourceSelectionPanel').style.display = 'none';
+    document.getElementById('tenantInput').value = tenantId;
+    const url = new URL(location.href);
+    url.searchParams.delete('platform');
+    url.searchParams.delete('session');
+    url.searchParams.set('tenant_id', tenantId);
+    history.replaceState(null, '', url);
+    refresh();
+  }catch(err){
+    msgEl.className = 'msg err';
+    msgEl.textContent = err.message;
+  }
+}
+
+// --- comptes connectés (inchangé, générique) ---
 
 async function refresh(){
   const tenantId = currentTenantId();
@@ -250,7 +500,9 @@ async function refresh(){
   url.searchParams.set('tenant_id', tenantId);
   history.replaceState(null, '', url);
   try{
-    const accounts = await api(`/api/admin/social-accounts?tenant_id=${encodeURIComponent(tenantId)}`);
+    const res = await api(`/api/admin/social-accounts?tenant_id=${encodeURIComponent(tenantId)}`);
+    const accounts = await res.json().catch(() => []);
+    if(!res.ok) throw new Error((accounts && accounts.error && (accounts.error.message || accounts.error)) || `Erreur ${res.status}`);
     render(Array.isArray(accounts) ? accounts : []);
   }catch(err){
     tbody.innerHTML = `<tr class="empty-row"><td colspan="6">${esc(err.message)}</td></tr>`;
@@ -281,7 +533,9 @@ function render(accounts){
 async function revoke(id){
   const msgEl = document.getElementById('actionMsg');
   try{
-    await api(`/api/admin/social-accounts/${encodeURIComponent(id)}/revoke`, { method: 'POST' });
+    const res = await api(`/api/admin/social-accounts/${encodeURIComponent(id)}/revoke`, { method: 'POST' });
+    const data = await res.json().catch(() => ({}));
+    if(!res.ok) throw new Error((data && data.error && (data.error.message || data.error)) || `Erreur ${res.status}`);
     msgEl.className = 'msg ok';
     msgEl.textContent = 'Compte révoqué.';
     refresh();
