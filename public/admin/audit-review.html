@@ -445,15 +445,50 @@ function renderDraft(d, data){
 // directement ici pour en déduire une identité — raw_answers reste affiché
 // plus bas de façon strictement générique (aucun champ n'y est traité
 // spécialement).
+//
+// H3-008D1O3 — pageIdentityLabel() décide QUOI afficher en H1/fil
+// d'Ariane, séparément de "qui est le contact" : un audit encore SANS
+// tenant (prospect) n'a par construction aucune identité métier
+// confirmée — le nom du contact y sert seulement de repère de PAGE
+// ("quel audit suis-je en train de lire"), jamais présenté comme une
+// identité de marque. Un audit APPROUVÉ a un vrai Tenant : le repère de
+// page doit alors venir de LUI (résolu via Pandore, jamais figé depuis
+// business_identity_candidate/le payload historique d'approbation) —
+// contact_name n'apparaît plus jamais ici une fois approuvé, seulement
+// dans le bloc Contact dédié. `resolved` permet une seconde passe : la
+// vraie valeur Tenant.Name arrive de façon asynchrone (résolution
+// Pandore), jamais synchrone au premier rendu.
+function pageIdentityLabel(data, resolvedTenantName){
+  if(data.draft && data.draft.status === 'v1' && data.draft.tenant_id){
+    if(resolvedTenantName) return resolvedTenantName;
+    // Résolution en cours : un candidat métier déjà connu (jamais le nom
+    // du contact) sert de repère provisoire, immédiatement remplacé par
+    // resolveApprovedTenantName dès que Pandore répond.
+    return data.business_identity_candidate || 'Client';
+  }
+  return data.contact_name || 'Prospect';
+}
+
+function renderNav(data, resolvedTenantName){
+  const label = pageIdentityLabel(data, resolvedTenantName);
+  const approved = !!(data.draft && data.draft.status === 'v1' && data.draft.tenant_id);
+  // H3-008D1O3 — un audit approuvé vit désormais sous son identité
+  // Tenant (Clients & Prospects > <Tenant.Name> > Audit, même profondeur
+  // que Comptes sociaux) ; un prospect encore sans tenant garde un seul
+  // segment (rien à hiérarchiser sous lui pour l'instant).
+  const crumbs = approved ? [{ label }, { label: 'Audit' }] : [{ label }];
+  AdminNav.render(document.getElementById('adminNav'), { zone: 'clients', crumbs });
+}
+
 function render(){
   const data = currentDetail;
   const statusClass = data.draft ? data.draft.status.toLowerCase() : data.status.toLowerCase();
-  const contactLabel = data.contact_name || 'Prospect';
-  AdminNav.render(document.getElementById('adminNav'), { zone: 'clients', crumbs: [{ label: contactLabel }] });
+  const label = pageIdentityLabel(data, null);
+  renderNav(data, null);
   document.getElementById('content').innerHTML = `
     <div class="header">
       <div>
-        <h1>${esc(contactLabel)}</h1>
+        <h1>Audit — <span id="pageIdentityLabel">${esc(label)}</span></h1>
         <div class="meta">${esc(data.contact_email)} — reçu le ${esc(fmtDate(data.submitted_at))}</div>
       </div>
       <span class="status-pill ${statusClass}">${esc(STATUS_LABELS[data.status] || data.status)}</span>
@@ -472,11 +507,12 @@ function render(){
     ${renderDraft(data.draft, data)}
   `;
   wireActions();
-  // H3-008D1O1B §1 — une fois approuvé, le "Client actif" affiché doit
-  // être l'identité RÉELLEMENT persistée dans Tenant.Name (résolue via
-  // Pandore), jamais rejouer contact_name/business_identity_candidate en
-  // mémoire : un renommage ultérieur (H3-008D1O1B §4) doit se refléter ici
-  // à la prochaine consultation, jamais une valeur figée au moment de
+  // H3-008D1O1B §1 / H3-008D1O3 — une fois approuvé, TOUTE apparition de
+  // l'identité client sur cette page (H1, fil d'Ariane, "Client actif")
+  // doit être l'identité RÉELLEMENT persistée dans Tenant.Name (résolue
+  // via Pandore), jamais rejouer contact_name/business_identity_candidate
+  // en mémoire : un renommage ultérieur (H3-008D1O1B §4) doit se refléter
+  // ici à la prochaine consultation, jamais une valeur figée au moment de
   // l'approbation.
   if(data.draft && data.draft.status === 'v1' && data.draft.tenant_id){
     resolveApprovedTenantName(data.draft.tenant_id);
@@ -492,9 +528,13 @@ async function resolveApprovedTenantName(tenantId){
     });
     if(!res.ok) return;
     const tenant = await res.json();
-    const el = document.getElementById('approvedTenantName');
-    if(el && tenant && tenant.name) el.textContent = tenant.name;
-  }catch{ /* pas de session Pandore active ou tenant inaccessible : le repli tenant_id reste affiché */ }
+    if(!tenant || !tenant.name) return;
+    const h1Label = document.getElementById('pageIdentityLabel');
+    if(h1Label) h1Label.textContent = tenant.name;
+    const statusLabel = document.getElementById('approvedTenantName');
+    if(statusLabel) statusLabel.textContent = tenant.name;
+    renderNav(currentDetail, tenant.name);
+  }catch{ /* pas de session Pandore active ou tenant inaccessible : le repère provisoire reste affiché */ }
 }
 
 function showMsg(text, ok){
