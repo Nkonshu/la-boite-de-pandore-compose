@@ -387,6 +387,13 @@ function showDashboard(){
   const params = new URLSearchParams(location.search);
   const tenantId = params.get('tenant_id');
   const clientNameParam = params.get('client_name');
+  // H3-008D1P2 — dérivé du MÊME contexte déjà authoritatif que
+  // maybeShowResourceSelection (platform+session dans l'URL), et AVANT le
+  // premier appel à renderSessionBar()/loadPlatformButtons() : sinon le
+  // bouton "Connecter" normal s'afficherait un instant avant d'être
+  // remplacé par la garde, exactement le genre de flash d'état
+  // contradictoire que §6 demande d'éviter.
+  activeSelectionPlatform = (params.get('platform') && params.get('session')) ? params.get('platform') : null;
   if(tenantId){
     document.getElementById('tenantInput').value = tenantId;
     document.getElementById('tenantSearchBar').style.display = 'none';
@@ -588,6 +595,17 @@ document.getElementById('tenantSearchInput').addEventListener('input', renderTen
 
 // --- H3-008D1J — connexion de plateforme générique ---
 
+// activeSelectionPlatform — H3-008D1P2 : PlatformID pour lequel une
+// autorisation vient d'être obtenue et attend une sélection de ressource
+// explicite (§1 du mandat : dérivé du MÊME contexte déjà authoritatif que
+// maybeShowResourceSelection — tenant/platform/session dans l'URL — jamais
+// un second état inventé). null = aucune sélection active, n'importe
+// quelle plateforme reste normalement actionnable. Volontairement une
+// simple variable de PlatformID (jamais `if platform === 'facebook'`) :
+// n'importe quelle plateforme enregistrée peut s'y trouver, une seule à la
+// fois par construction de l'écran (un seul panneau de sélection existe).
+let activeSelectionPlatform = null;
+
 // platformReadiness — H3-008D1M §7 : "CONFIGURED, ACTIVE ou CONNECTED ne
 // doivent jamais être synonymes." Distingue explicitement PLATFORM_CAPABILITY
 // (l'adaptateur EXISTE, déjà garanti par sa présence dans `available`) de
@@ -595,17 +613,28 @@ document.getElementById('tenantSearchInput').addEventListener('input', renderTen
 // PUBLICATION_READINESS restent hors périmètre de ce lot — seule la
 // lecture Niveau A, la SEULE précondition que Pandore connaît déjà
 // aujourd'hui avant tout OAuth, §7 : "Pandore doit au minimum savoir que
-// sa Level-A configuration requise existe et est ACTIVE"). Fonction PURE,
-// testée directement.
-function platformReadiness(platformId, levelAByPlatform){
+// sa Level-A configuration requise existe et est ACTIVE").
+//
+// H3-008D1P2 §1/§2/§3 — activeSelectionPlatform ajoute un troisième état,
+// distinct des deux précédents et prioritaire sur eux : une plateforme
+// pour laquelle une autorisation vient d'aboutir et attend une sélection
+// de ressource explicite ne doit plus jamais présenter un second bouton
+// "Connecter" concurrent, quelle que soit sa configuration Level A par
+// ailleurs — ni globalement (§3 : les autres plateformes restent
+// inchangées, ce contrôle ne s'applique qu'à CETTE plateforme précise).
+// Fonction PURE, testée directement.
+function platformReadiness(platformId, levelAByPlatform, activePlatform){
+  if(platformId === activePlatform){
+    return { ready: false, selectionActive: true, reason: 'Autorisation reçue — terminez la sélection de la ressource ci-dessous.' };
+  }
   const levelA = levelAByPlatform[platformId];
   if(!levelA || !levelA.configured){
-    return { ready: false, reason: 'Configuration Level A manquante — un PANDORE_SUPER_ADMIN doit la renseigner dans Intégrations plateforme.' };
+    return { ready: false, selectionActive: false, reason: 'Configuration Level A manquante — un PANDORE_SUPER_ADMIN doit la renseigner dans Intégrations plateforme.' };
   }
   if(levelA.status === 'DISABLED'){
-    return { ready: false, reason: 'Configuration Level A désactivée — un PANDORE_SUPER_ADMIN doit la réactiver dans Intégrations plateforme.' };
+    return { ready: false, selectionActive: false, reason: 'Configuration Level A désactivée — un PANDORE_SUPER_ADMIN doit la réactiver dans Intégrations plateforme.' };
   }
-  return { ready: true, reason: '' };
+  return { ready: true, selectionActive: false, reason: '' };
 }
 
 async function loadPlatformButtons(){
@@ -630,10 +659,15 @@ async function loadPlatformButtons(){
     const levelAByPlatform = {};
     (Array.isArray(levelAList) ? levelAList : []).forEach(p => { levelAByPlatform[p.platform_id] = p; });
     container.innerHTML = platforms.map(p => {
-      const readiness = platformReadiness(p.platform_id, levelAByPlatform);
+      const readiness = platformReadiness(p.platform_id, levelAByPlatform, activeSelectionPlatform);
       if(readiness.ready){
         return `<button class="btn btn-sm" data-platform="${esc(p.platform_id)}">Connecter ${esc(p.display_name)}</button>`;
       }
+      // H3-008D1P2 — même gabarit visuel que le cas "Level A non prêt"
+      // (jamais une couleur seule pour porter l'information, §2 du
+      // mandat) : bouton désactivé SANS data-platform (donc jamais câblé
+      // à connectPlatform, défense en profondeur au-delà du seul attribut
+      // disabled) + message explicite juste en dessous.
       return `<div class="platform-not-ready">
         <button class="btn btn-sm" disabled title="${esc(readiness.reason)}">Connecter ${esc(p.display_name)}</button>
         <div class="msg warn">${esc(readiness.reason)}</div>
@@ -704,6 +738,11 @@ async function loadResources(tenantId, platform, session){
     const resources = await apiWithPandoreSession(`/api/admin/tenants/${encodeURIComponent(tenantId)}/platform-connections/${encodeURIComponent(platform)}/${encodeURIComponent(session)}/resources`);
     if(!Array.isArray(resources) || resources.length === 0){
       listEl.innerHTML = '<div class="msg">Aucune ressource découverte pour cette autorisation.</div>';
+      // H3-008D1P2 §6 — rien à sélectionner : la garde ne doit jamais
+      // rester bloquée sur une plateforme qui n'a plus d'action possible
+      // (ni sélection, ni ré-autorisation) — la lever restaure une
+      // ré-autorisation normale, seule issue restante.
+      clearActiveSelection();
       return;
     }
     // Jamais de sélection automatique même s'il n'y en a qu'une seule —
@@ -724,7 +763,23 @@ async function loadResources(tenantId, platform, session){
     listEl.innerHTML = '';
     msgEl.className = 'msg err';
     msgEl.textContent = err.message;
+    // H3-008D1P2 §6 — une session invalide/expirée/déjà consommée
+    // ailleurs (backend seul juge, jamais deviné ici) ne doit jamais
+    // enfermer l'admin derrière une garde qu'il ne peut plus lever :
+    // la seule issue restante redevient une ré-autorisation normale.
+    clearActiveSelection();
   }
+}
+
+// clearActiveSelection — H3-008D1P2 §6 : lève la garde de réinitiation et
+// rafraîchit immédiatement le rendu des boutons "Connecter" (rendu normal
+// basé sur la readiness Level A habituelle, plus aucune plateforme
+// prioritairement bloquée). Point de sortie UNIQUE réutilisé par les trois
+// issues possibles d'une sélection active : succès, session non
+// actionnable, aucune ressource à sélectionner.
+function clearActiveSelection(){
+  activeSelectionPlatform = null;
+  loadPlatformButtons();
 }
 
 async function selectResource(tenantId, platform, session, externalId){
@@ -744,6 +799,11 @@ async function selectResource(tenantId, platform, session, externalId){
     url.searchParams.delete('session');
     url.searchParams.set('tenant_id', tenantId);
     history.replaceState(null, '', url);
+    // H3-008D1P2 §6 — sélection finalisée : plus aucune raison de garder
+    // cette plateforme priorisée sur la sélection de ressource, elle
+    // redevient normalement actionnable (ex. connecter une ressource
+    // supplémentaire plus tard).
+    clearActiveSelection();
     refresh();
   }catch(err){
     msgEl.className = 'msg err';
