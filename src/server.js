@@ -860,6 +860,73 @@ app.put('/api/admin/platform-integrations/:platform', async (req, res) => {
   }
 });
 
+// GET /api/admin/platform-integrations/:platform/guide — H3-008D1M.
+// :platform reste OPAQUE pour compose (jamais interprété) — Pandore seul
+// décide si un guide existe pour cette plateforme (404 sinon, relayé tel
+// quel). Aucun contenu de guide n'est jamais fabriqué ou complété ici.
+app.get('/api/admin/platform-integrations/:platform/guide', async (req, res) => {
+  if (!checkAdmin(req, res)) return;
+  const authorization = requirePandoreBearer(req, res);
+  if (!authorization) return;
+  try {
+    const goRes = await fetch(`${PANDORE_API_BASE}/admin/platform-integrations/${encodeURIComponent(req.params.platform)}/guide`, { headers: { Authorization: authorization } });
+    const data = await goRes.json().catch(() => ({}));
+    res.status(goRes.status).json(data);
+  } catch (err) {
+    console.error('platform-integrations guide proxy:', err.message);
+    res.status(502).json({ error: 'Lecture impossible pour le moment' });
+  }
+});
+
+// --- H3-008D1M — contexte tenant. Même relais Bearer que ci-dessus
+// (F0.2) : compose ne décide jamais lui-même de la visibilité d'un
+// tenant, Pandore reste seul autoritaire (canAccessTenant côté Go). ---
+
+// toAdminTenantView traduit un core.Tenant (Go, PascalCase, pas de tags
+// JSON) vers le snake_case attendu par le frontend — même règle que
+// toAdminSocialAccountView ci-dessus.
+function toAdminTenantView(t) {
+  return { id: t.ID, name: t.Name, status: t.Status, created_at: t.CreatedAt };
+}
+
+// GET /api/admin/tenants/:id — résolution du nom métier du client (ex.
+// "Chap Chap") pour l'affichage, jamais pour l'autorisation (celle-ci
+// reste entièrement décidée par Pandore via le Bearer relayé).
+app.get('/api/admin/tenants/:id', async (req, res) => {
+  if (!checkAdmin(req, res)) return;
+  const authorization = requirePandoreBearer(req, res);
+  if (!authorization) return;
+  try {
+    const goRes = await fetch(`${PANDORE_API_BASE}/tenants/${encodeURIComponent(req.params.id)}`, { headers: { Authorization: authorization } });
+    const data = await goRes.json().catch(() => ({}));
+    if (!goRes.ok) return res.status(goRes.status).json(data);
+    res.status(goRes.status).json(toAdminTenantView(data));
+  } catch (err) {
+    console.error('tenant detail proxy:', err.message);
+    res.status(502).json({ error: 'Lecture impossible pour le moment' });
+  }
+});
+
+// GET /api/admin/tenants — liste déjà scopée par rôle côté Go
+// (SUPER_ADMIN: tous ; PANDORE_OPERATOR: uniquement ses tenants assignés)
+// — sert le sélecteur/recherche client quand un Super Admin arrive
+// directement sur Comptes sociaux sans contexte tenant (§5 du mandat
+// H3-008D1M).
+app.get('/api/admin/tenants', async (req, res) => {
+  if (!checkAdmin(req, res)) return;
+  const authorization = requirePandoreBearer(req, res);
+  if (!authorization) return;
+  try {
+    const goRes = await fetch(`${PANDORE_API_BASE}/admin/tenants`, { headers: { Authorization: authorization } });
+    const data = await goRes.json().catch(() => ({}));
+    if (!goRes.ok) return res.status(goRes.status).json(data);
+    res.status(goRes.status).json(Array.isArray(data) ? data.map(toAdminTenantView) : []);
+  } catch (err) {
+    console.error('tenants list proxy:', err.message);
+    res.status(502).json({ error: 'Lecture impossible pour le moment' });
+  }
+});
+
 // toAdminSocialAccountView traduit un core.SocialAccount (Go, PascalCase,
 // pas de tags JSON) vers le snake_case attendu par social-accounts.html —
 // même règle que toAdminAuditView plus haut.

@@ -93,6 +93,36 @@
   .field .secret-state.unset { color: var(--bad); }
 
   .form-box { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+
+  .mode-toggle { display: flex; gap: 8px; margin-bottom: 14px; }
+  .mode-btn.active { background: var(--accent); color: #201404; border-color: var(--accent); }
+
+  .guide-progress { font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; color: var(--mute-dim); margin-bottom: 12px; }
+  .guide-step h3 { font-size: 16px; margin-bottom: 8px; }
+  .guide-step .objective { font-size: 13px; color: var(--mute); margin-bottom: 10px; }
+  .guide-step .explanation { font-size: 13.5px; margin-bottom: 12px; }
+  .guide-step .nav-instructions { font-size: 13px; background: var(--surface-raised); border-left: 3px solid var(--accent); padding: 10px 12px; border-radius: 4px; margin-bottom: 12px; }
+  .guide-step .search-text { font-size: 12.5px; color: var(--mute-dim); margin-bottom: 10px; }
+  .guide-step .search-text code { background: var(--surface-raised); padding: 2px 6px; border-radius: 4px; }
+  .guide-step .external-link { display: inline-block; margin-bottom: 12px; font-size: 13px; }
+  .guide-step .copy-row { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
+  .guide-step .copy-row code { flex: 1; background: var(--surface-raised); border: 1px solid var(--border); border-radius: 8px; padding: 9px 12px; font-size: 12.5px; word-break: break-all; }
+  .guide-step .warning { font-size: 12.5px; color: var(--bad); background: rgba(226,104,90,0.1); border-radius: 6px; padding: 8px 10px; margin-bottom: 6px; }
+  .guide-step .expected-action { font-size: 13px; font-weight: 600; margin-bottom: 12px; }
+  .guide-step .image-placeholder { font-size: 12px; color: var(--mute-dim); border: 1px dashed var(--border); border-radius: 8px; padding: 16px; text-align: center; margin-bottom: 12px; }
+  .guide-step .image-thumb-wrap { margin-bottom: 12px; }
+  .guide-step .image-thumb { display: block; max-width: 100%; max-height: 220px; border-radius: 8px; border: 1px solid var(--border); cursor: zoom-in; }
+  .guide-step .image-caption { font-size: 11.5px; color: var(--mute-dim); margin-top: 4px; }
+
+  .image-lightbox { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; }
+  .image-lightbox-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.75); }
+  .image-lightbox-content { position: relative; max-width: 92vw; max-height: 92vh; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .image-lightbox-content img { max-width: 92vw; max-height: 82vh; border-radius: 8px; }
+  .guide-nav { display: flex; justify-content: space-between; align-items: center; margin-top: 16px; gap: 8px; }
+  .guide-step-list { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+  .guide-step-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--border); }
+  .guide-step-dot.done { background: var(--good); }
+  .guide-step-dot.current { background: var(--accent); }
   .msg { font-size: 13px; margin-top: 10px; }
   .msg.err { color: var(--bad); }
   .msg.ok { color: var(--good); }
@@ -132,7 +162,17 @@
 
     <div class="panel" id="configPanel" style="display:none;">
       <div class="panel-head"><h2 id="configPanelTitle">Configuration</h2></div>
-      <div class="form-box">
+
+      <!-- H3-008D1M — deux modes (§1 du mandat) : Rapide reste le
+           formulaire technique déjà établi (H3-008D1K, inchangé) ;
+           Guidé ajoute un assistant étape par étape générique, dérivé de
+           GET .../guide. Le mode par défaut est Rapide. -->
+      <div class="mode-toggle" id="modeToggle">
+        <button class="btn btn-sm mode-btn active" id="modeQuickBtn" type="button">Configuration rapide</button>
+        <button class="btn btn-ghost btn-sm mode-btn" id="modeGuidedBtn" type="button">Configuration guidée</button>
+      </div>
+
+      <div class="form-box" id="quickModePanel">
         <div id="configFields"></div>
         <div class="field">
           <label for="statusSelect">Statut</label>
@@ -145,7 +185,25 @@
         <button class="btn btn-ghost" id="cancelConfigBtn" type="button">Fermer</button>
         <div class="msg" id="configMsg"></div>
       </div>
+
+      <div class="form-box" id="guidedModePanel" style="display:none;">
+        <div id="guidedWizard"></div>
+        <button class="btn btn-ghost" id="cancelConfigBtnGuided" type="button">Fermer</button>
+        <div class="msg" id="guidedMsg"></div>
+      </div>
     </div>
+  </div>
+</div>
+
+<!-- H3-008D1M1 §2 — agrandissement d'illustration : réutilise la MÊME
+     image déjà chargée dans l'étape (jamais une seconde source, jamais un
+     appel réseau supplémentaire) — un simple agrandissement visuel, aucune
+     fuite de données possible puisqu'aucune donnée n'est ajoutée. -->
+<div class="image-lightbox" id="imageLightbox" style="display:none;" role="dialog" aria-modal="true">
+  <div class="image-lightbox-backdrop" id="imageLightboxBackdrop"></div>
+  <div class="image-lightbox-content">
+    <img id="imageLightboxImg" src="" alt="">
+    <button class="btn btn-ghost btn-sm" id="imageLightboxClose" type="button">Fermer ✕</button>
   </div>
 </div>
 
@@ -414,6 +472,19 @@ function buildConfigFormHTML(schema, detail){
 let currentConfigPlatform = null;
 let currentConfigDetail = null;
 
+// --- H3-008D1M — état du mode Guidé. guidedFieldValues est un objet
+// JavaScript EN MÉMOIRE UNIQUEMENT (jamais localStorage/sessionStorage,
+// jamais l'URL) — il ne survit ni à un rechargement de page ni à un
+// changement de plateforme (réinitialisé dans loadGuide ci-dessous). Il
+// existe UNIQUEMENT pour que la valeur qu'un admin vient de taper à
+// l'étape N reste visible s'il navigue vers l'étape N+1 puis revient — ce
+// n'est jamais le secret déjà enregistré côté serveur, qui n'est JAMAIS
+// prérempli, ici comme en mode Rapide.
+let currentGuide = null;
+let currentGuideStepIndex = 0;
+let guidedFieldValues = {};
+let guideStepStatus = [];
+
 async function openConfigForm(platformId){
   const panel = document.getElementById('configPanel');
   const msgEl = document.getElementById('configMsg');
@@ -422,6 +493,8 @@ async function openConfigForm(platformId){
   panel.style.display = 'block';
   document.getElementById('configPanelTitle').textContent = 'Chargement...';
   document.getElementById('configFields').innerHTML = '';
+  currentGuide = null;
+  guidedFieldValues = {};
   try{
     const { ok, data, status } = await apiWithPandoreSession(`/api/admin/platform-integrations/${encodeURIComponent(platformId)}`);
     if(!ok){
@@ -435,12 +508,224 @@ async function openConfigForm(platformId){
     document.getElementById('configPanelTitle').textContent = `${data.display_name} (${data.platform_id})`;
     document.getElementById('configFields').innerHTML = buildConfigFormHTML(data.configuration_schema || [], data);
     document.getElementById('statusSelect').value = data.status || 'ACTIVE';
+    setConfigMode('quick');
   }catch(err){
     document.getElementById('configPanelTitle').textContent = 'Erreur';
     msgEl.className = 'msg err';
     msgEl.textContent = err.message;
   }
 }
+
+// setConfigMode — bascule visuelle pure (§1 du mandat : deux modes,
+// jamais deux formulaires distincts pour les mêmes données). Charge le
+// guide au premier passage en mode Guidé pour cette ouverture du
+// formulaire (currentGuide reste null tant que non chargé).
+function setConfigMode(mode){
+  const quickBtn = document.getElementById('modeQuickBtn');
+  const guidedBtn = document.getElementById('modeGuidedBtn');
+  const quickPanel = document.getElementById('quickModePanel');
+  const guidedPanel = document.getElementById('guidedModePanel');
+  quickBtn.classList.toggle('active', mode === 'quick');
+  guidedBtn.classList.toggle('active', mode === 'guided');
+  quickBtn.classList.toggle('btn-ghost', mode !== 'quick');
+  guidedBtn.classList.toggle('btn-ghost', mode !== 'guided');
+  quickPanel.style.display = mode === 'quick' ? 'block' : 'none';
+  guidedPanel.style.display = mode === 'guided' ? 'block' : 'none';
+  if(mode === 'guided' && !currentGuide){
+    loadGuide();
+  }
+}
+document.getElementById('modeQuickBtn').addEventListener('click', () => setConfigMode('quick'));
+document.getElementById('modeGuidedBtn').addEventListener('click', () => setConfigMode('guided'));
+
+// loadGuide — GÉNÉRIQUE : ne connaît AUCUN contenu de guide, seulement la
+// structure renvoyée par GET .../guide (§1/§8 du mandat : "aucune branche
+// if facebook/if instagram... enum fermé aux dix plateformes"). Une
+// plateforme sans guide (404) retombe simplement sur un message invitant
+// à utiliser le mode Rapide — jamais une erreur bloquante.
+async function loadGuide(){
+  const wizard = document.getElementById('guidedWizard');
+  wizard.innerHTML = '<div class="msg">Chargement du guide...</div>';
+  try{
+    const { ok, data, status } = await apiWithPandoreSession(`/api/admin/platform-integrations/${encodeURIComponent(currentConfigPlatform)}/guide`);
+    if(!ok){
+      if(status === 404){
+        wizard.innerHTML = '<div class="msg">Aucun guide disponible pour cette plateforme — utilisez la configuration rapide ci-dessus.</div>';
+        return;
+      }
+      wizard.innerHTML = `<div class="msg err">${esc((data.error && data.error.message) || 'Erreur ' + status)}</div>`;
+      return;
+    }
+    currentGuide = data;
+    currentGuideStepIndex = 0;
+    guideStepStatus = (data.steps || []).map(() => 'todo');
+    renderGuidedWizard();
+  }catch(err){
+    wizard.innerHTML = `<div class="msg err">${esc(err.message)}</div>`;
+  }
+}
+
+// validateGuideAssetManifest — fonction PURE (§3 du mandat H3-008D1M1) :
+// "Ne jamais conserver deux images CURRENT contradictoires pour la même
+// instruction/version." Vérifie le manifeste (public/admin/guide-assets/manifest.json,
+// voir docs/08_PLATFORM_ENGINE.md du repo pandore pour le schéma complet)
+// — jamais lu au runtime par le moteur du wizard lui-même (registre de
+// traçabilité/audit uniquement), mais validé ici pour permettre une
+// vérification automatisée avant publication d'un nouvel asset.
+function validateGuideAssetManifest(manifest){
+  const errors = [];
+  const seenCurrent = new Map();
+  (manifest || []).forEach((entry, i) => {
+    if(entry.provenance !== 'REAL_MANUAL_SETUP'){
+      errors.push(`entrée ${i} (${entry.image_ref}): provenance attendue REAL_MANUAL_SETUP, obtenu ${entry.provenance}`);
+    }
+    if(entry.status !== 'CURRENT' && entry.status !== 'SUPERSEDED'){
+      errors.push(`entrée ${i} (${entry.image_ref}): statut inconnu ${entry.status}`);
+    }
+    if(entry.status === 'CURRENT'){
+      (entry.steps || []).forEach(step => {
+        const key = entry.platform + '::' + step;
+        if(seenCurrent.has(key)){
+          errors.push(`conflit CURRENT: ${entry.platform}/${step} porté à la fois par ${seenCurrent.get(key)} et ${entry.image_ref}`);
+        } else {
+          seenCurrent.set(key, entry.image_ref);
+        }
+      });
+    }
+  });
+  return { valid: errors.length === 0, errors };
+}
+
+// resolveGuideAssetURL — fonction PURE (§2/§3 du mandat H3-008D1M1) :
+// traduit un ImageRef OPAQUE (ex. "facebook/v1/03-locate-app-id.png") vers
+// le chemin statique compose correspondant. Aucune interprétation du
+// contenu de l'ImageRef, aucune branche par plateforme — un futur guide
+// pour n'importe quelle onzième plateforme utilise exactement cette même
+// résolution.
+function resolveGuideAssetURL(imageRef){
+  return '/admin/guide-assets/' + imageRef.split('/').map(encodeURIComponent).join('/');
+}
+
+// renderGuideStep — fonction PURE (aucun accès DOM au-delà de la
+// construction de la chaîne retournée), extraite et testée directement
+// (§10 du mandat, points 2-6). Réutilise renderConfigField pour les
+// étapes liées à un champ Pandore — jamais une seconde logique de rendu
+// de champ dupliquée entre modes Rapide et Guidé.
+function renderGuideStep(step, index, total, schema, detail, values){
+  const parts = [];
+  parts.push(`<div class="guide-progress">Étape ${index + 1} / ${total}</div>`);
+  parts.push('<div class="guide-step">');
+  parts.push(`<h3>${esc(step.title)}</h3>`);
+  if(step.objective) parts.push(`<div class="objective">${esc(step.objective)}</div>`);
+  if(step.explanation) parts.push(`<div class="explanation">${esc(step.explanation)}</div>`);
+  if(step.external_url){
+    parts.push(`<a class="external-link" href="${esc(step.external_url)}" target="_blank" rel="noopener noreferrer">Ouvrir ${esc(step.external_url)} →</a>`);
+  }
+  if(step.external_navigation){
+    parts.push(`<div class="nav-instructions">${esc(step.external_navigation)}</div>`);
+  }
+  if(step.search_text){
+    parts.push(`<div class="search-text">Rechercher : <code>${esc(step.search_text)}</code></div>`);
+  }
+  // H3-008D1M1 §2 — l'image répond à "où dois-je regarder/cliquer ?",
+  // jamais une dépendance : le texte d'accompagnement (déjà poussé
+  // au-dessus) reste TOUJOURS suffisant seul. alt = le texte d'action
+  // attendu (le plus utile pour un lecteur d'écran), jamais vide. onerror
+  // retombe sur le même message générique que "pas d'image", jamais une
+  // image cassée visible ni un crash du wizard.
+  if(step.image_ref){
+    const url = resolveGuideAssetURL(step.image_ref);
+    const alt = step.expected_action || step.title || 'Illustration de l’étape';
+    parts.push(`<div class="image-thumb-wrap">
+      <img class="image-thumb" src="${esc(url)}" alt="${esc(alt)}" data-image-ref="${esc(step.image_ref)}"
+           onerror="this.closest('.image-thumb-wrap').innerHTML='<div class=&quot;image-placeholder&quot;>Illustration indisponible pour le moment.</div>'">
+      <div class="image-caption">Cliquer pour agrandir</div>
+    </div>`);
+  } else {
+    parts.push('<div class="image-placeholder">Aucune illustration disponible pour cette étape pour le moment.</div>');
+  }
+  if(step.pandore_field_key){
+    const field = (schema || []).find(f => f.key === step.pandore_field_key);
+    if(field){
+      const secretsSet = (detail && detail.secret_fields_set) || {};
+      const nonSecret = (detail && detail.non_secret_config) || {};
+      const remembered = Object.prototype.hasOwnProperty.call(values, field.key) ? values[field.key] : undefined;
+      const currentValue = field.kind === 'SECRET' ? remembered : (remembered !== undefined ? remembered : nonSecret[field.key]);
+      parts.push(renderConfigField(field, currentValue, !!secretsSet[field.key]));
+    }
+  }
+  if(step.pandore_value){
+    parts.push(`<div class="copy-row"><code>${esc(step.pandore_value)}</code>${step.copyable ? `<button class="btn btn-ghost btn-sm" type="button" data-copy-value="${esc(step.pandore_value)}">Copier</button>` : ''}</div>`);
+  }
+  (step.warnings || []).forEach(w => { parts.push(`<div class="warning">⚠ ${esc(w)}</div>`); });
+  if(step.expected_action){
+    parts.push(`<div class="expected-action">Action attendue : ${esc(step.expected_action)}</div>`);
+  }
+  parts.push(`<div class="help">Confirmation : ${step.confirmation_kind === 'MACHINE_VERIFIED' ? 'vérifiée par Pandore' : 'à confirmer par vous-même'}.</div>`);
+  parts.push('</div>');
+  return parts.join('');
+}
+
+function renderGuidedWizard(){
+  const wizard = document.getElementById('guidedWizard');
+  if(!currentGuide || !currentGuide.steps || currentGuide.steps.length === 0){
+    wizard.innerHTML = '<div class="msg">Ce guide ne contient aucune étape.</div>';
+    return;
+  }
+  const total = currentGuide.steps.length;
+  const dots = currentGuide.steps.map((_, i) => {
+    const cls = i === currentGuideStepIndex ? 'current' : (guideStepStatus[i] === 'done' ? 'done' : '');
+    return `<span class="guide-step-dot ${cls}" title="Étape ${i + 1}"></span>`;
+  }).join('');
+  const step = currentGuide.steps[currentGuideStepIndex];
+  const stepHTML = renderGuideStep(step, currentGuideStepIndex, total, currentConfigDetail.configuration_schema, currentConfigDetail, guidedFieldValues);
+  wizard.innerHTML = `
+    <div class="guide-step-list">${dots}</div>
+    ${stepHTML}
+    <div class="guide-nav">
+      <button class="btn btn-ghost btn-sm" id="guidePrevBtn" type="button" ${currentGuideStepIndex === 0 ? 'disabled' : ''}>← Précédent</button>
+      <button class="btn btn-sm" id="guideMarkDoneBtn" type="button">Marquer terminé</button>
+      <button class="btn btn-ghost btn-sm" id="guideNextBtn" type="button" ${currentGuideStepIndex === total - 1 ? 'disabled' : ''}>Suivant →</button>
+    </div>
+    <button class="btn" id="guideSaveBtn" type="button" style="margin-top:14px;width:100%;">Enregistrer la configuration Level A</button>
+  `;
+  wizard.querySelectorAll('[data-key]').forEach(el => {
+    el.addEventListener('input', () => { guidedFieldValues[el.getAttribute('data-key')] = el.value; });
+  });
+  wizard.querySelectorAll('.image-thumb').forEach(img => {
+    img.addEventListener('click', () => openImageLightbox(img.getAttribute('src'), img.getAttribute('alt')));
+  });
+  const copyBtn = wizard.querySelector('[data-copy-value]');
+  if(copyBtn){
+    copyBtn.addEventListener('click', async () => {
+      try{ await navigator.clipboard.writeText(copyBtn.getAttribute('data-copy-value')); copyBtn.textContent = 'Copié !'; setTimeout(() => { copyBtn.textContent = 'Copier'; }, 1500); }
+      catch{ /* presse-papiers indisponible : la valeur reste visible et sélectionnable manuellement */ }
+    });
+  }
+  document.getElementById('guidePrevBtn').addEventListener('click', () => { currentGuideStepIndex = Math.max(0, currentGuideStepIndex - 1); renderGuidedWizard(); });
+  document.getElementById('guideNextBtn').addEventListener('click', () => { currentGuideStepIndex = Math.min(total - 1, currentGuideStepIndex + 1); renderGuidedWizard(); });
+  document.getElementById('guideMarkDoneBtn').addEventListener('click', () => { guideStepStatus[currentGuideStepIndex] = 'done'; renderGuidedWizard(); });
+  document.getElementById('guideSaveBtn').addEventListener('click', saveGuidedConfig);
+}
+document.getElementById('cancelConfigBtnGuided').addEventListener('click', () => { document.getElementById('configPanel').style.display = 'none'; });
+
+// --- H3-008D1M1 §2 — agrandissement d'illustration. Réutilise TOUJOURS le
+// src déjà chargé dans la miniature (jamais une seconde requête réseau,
+// jamais une donnée additionnelle) : aucune fuite possible au-delà de ce
+// que l'étape affichait déjà. ---
+function openImageLightbox(src, alt){
+  const img = document.getElementById('imageLightboxImg');
+  img.src = src;
+  img.alt = alt || '';
+  document.getElementById('imageLightbox').style.display = 'flex';
+}
+function closeImageLightbox(){
+  document.getElementById('imageLightbox').style.display = 'none';
+  document.getElementById('imageLightboxImg').src = '';
+}
+document.getElementById('imageLightboxClose').addEventListener('click', closeImageLightbox);
+document.getElementById('imageLightboxBackdrop').addEventListener('click', closeImageLightbox);
+document.addEventListener('keydown', (e) => { if(e.key === 'Escape') closeImageLightbox(); });
 
 document.getElementById('saveConfigBtn').addEventListener('click', saveConfig);
 
@@ -457,12 +742,57 @@ document.getElementById('saveConfigBtn').addEventListener('click', saveConfig);
 //     rechargement explicite — JAMAIS de nouvelle tentative automatique ;
 //   - après succès, les champs SECRET sont vidés du DOM (jamais conservés
 //     dans le navigateur — voir §4, "clear secret input... as practical").
-async function saveConfig(){
-  const msgEl = document.getElementById('configMsg');
+// performPlatformSave — logique de sauvegarde PARTAGÉE entre les modes
+// Rapide et Guidé (§1 du mandat : les DEUX modes doivent produire
+// exactement le même appel PUT, jamais deux chemins de sauvegarde
+// divergents). Mêmes invariants qu'avant H3-008D1M, inchangés :
+//   - un champ SECRET laissé vide N'EST JAMAIS envoyé (préservation par
+//     Go, jamais recréée ici) ;
+//   - TOUS les champs non-secrets sont envoyés à chaque sauvegarde ;
+//   - expected_version n'est envoyé QUE si la plateforme était déjà
+//     configurée ;
+//   - un 409 (CAS) affiche un message de conflit sûr, jamais de nouvelle
+//     tentative automatique.
+async function performPlatformSave(nonSecretConfig, secretConfig, status, msgEl){
   msgEl.className = 'msg';
   msgEl.textContent = '';
-  if(!currentConfigPlatform || !currentConfigDetail) return;
+  if(!currentConfigPlatform || !currentConfigDetail) return null;
 
+  const body = { non_secret_config: nonSecretConfig, secret_config: secretConfig, status };
+  if(currentConfigDetail.configured){
+    body.expected_version = currentConfigDetail.version;
+  }
+
+  try{
+    const { status: httpStatus, ok, data } = await apiWithPandoreSession(`/api/admin/platform-integrations/${encodeURIComponent(currentConfigPlatform)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if(httpStatus === 409){
+      msgEl.className = 'msg warn';
+      msgEl.textContent = 'Un autre administrateur a modifié cette configuration entre-temps. Rechargez avant de réessayer.';
+      return null;
+    }
+    if(!ok){
+      msgEl.className = 'msg err';
+      msgEl.textContent = (data.error && data.error.message) || `Erreur ${httpStatus}`;
+      return null;
+    }
+    currentConfigDetail = data;
+    msgEl.className = 'msg ok';
+    msgEl.textContent = 'Configuration enregistrée.';
+    loadPlatformList();
+    return data;
+  }catch(err){
+    msgEl.className = 'msg err';
+    msgEl.textContent = err.message;
+    return null;
+  }
+}
+
+async function saveConfig(){
+  const msgEl = document.getElementById('configMsg');
   const nonSecretConfig = {};
   const secretConfig = {};
   document.querySelectorAll('#configFields [data-key]').forEach(el => {
@@ -474,40 +804,44 @@ async function saveConfig(){
     }
     nonSecretConfig[key] = el.value;
   });
+  const data = await performPlatformSave(nonSecretConfig, secretConfig, document.getElementById('statusSelect').value, msgEl);
+  if(!data) return;
+  // Succès : jamais de secret conservé dans le DOM/état navigateur.
+  document.querySelectorAll('#configFields input[data-kind="SECRET"]').forEach(el => { el.value = ''; });
+  document.getElementById('configFields').innerHTML = buildConfigFormHTML(data.configuration_schema || [], data);
+  document.getElementById('statusSelect').value = data.status || 'ACTIVE';
+}
 
-  const body = { non_secret_config: nonSecretConfig, secret_config: secretConfig, status: document.getElementById('statusSelect').value };
-  if(currentConfigDetail.configured){
-    body.expected_version = currentConfigDetail.version;
-  }
-
-  try{
-    const { status, ok, data } = await apiWithPandoreSession(`/api/admin/platform-integrations/${encodeURIComponent(currentConfigPlatform)}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    if(status === 409){
-      msgEl.className = 'msg warn';
-      msgEl.textContent = 'Un autre administrateur a modifié cette configuration entre-temps. Rechargez avant de réessayer.';
+// saveGuidedConfig — collecte les valeurs depuis TOUT le schéma déclaré
+// (pas seulement l'étape courante) : guidedFieldValues porte ce que
+// l'admin a tapé au fil des étapes déjà visitées ; un champ non-secret
+// jamais visité retombe sur sa valeur déjà connue de Pandore
+// (currentConfigDetail.non_secret_config), exactement comme le mode
+// Rapide envoie toujours l'intégralité des champs non-secrets.
+async function saveGuidedConfig(){
+  const msgEl = document.getElementById('guidedMsg');
+  const schema = (currentConfigDetail && currentConfigDetail.configuration_schema) || [];
+  const nonSecretConfig = {};
+  const secretConfig = {};
+  const existingNonSecret = (currentConfigDetail && currentConfigDetail.non_secret_config) || {};
+  schema.forEach(field => {
+    if(field.kind === 'SECRET'){
+      if(Object.prototype.hasOwnProperty.call(guidedFieldValues, field.key) && guidedFieldValues[field.key] !== ''){
+        secretConfig[field.key] = guidedFieldValues[field.key];
+      }
       return;
     }
-    if(!ok){
-      msgEl.className = 'msg err';
-      msgEl.textContent = (data.error && data.error.message) || `Erreur ${status}`;
-      return;
-    }
-    // Succès : jamais de secret conservé dans le DOM/état navigateur.
-    document.querySelectorAll('#configFields input[data-kind="SECRET"]').forEach(el => { el.value = ''; });
-    currentConfigDetail = data;
-    document.getElementById('configFields').innerHTML = buildConfigFormHTML(data.configuration_schema || [], data);
-    document.getElementById('statusSelect').value = data.status || 'ACTIVE';
-    msgEl.className = 'msg ok';
-    msgEl.textContent = 'Configuration enregistrée.';
-    loadPlatformList();
-  }catch(err){
-    msgEl.className = 'msg err';
-    msgEl.textContent = err.message;
-  }
+    nonSecretConfig[field.key] = Object.prototype.hasOwnProperty.call(guidedFieldValues, field.key)
+      ? guidedFieldValues[field.key]
+      : (existingNonSecret[field.key] || '');
+  });
+  const statusValue = (currentConfigDetail && currentConfigDetail.status) || 'ACTIVE';
+  const data = await performPlatformSave(nonSecretConfig, secretConfig, statusValue, msgEl);
+  if(!data) return;
+  // Succès : jamais de secret conservé en mémoire navigateur au-delà de
+  // cet instant.
+  schema.forEach(field => { if(field.kind === 'SECRET') delete guidedFieldValues[field.key]; });
+  renderGuidedWizard();
 }
 
 (async function init(){

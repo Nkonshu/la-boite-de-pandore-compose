@@ -71,6 +71,12 @@
     padding: 9px 12px; color: var(--text); font-family: 'IBM Plex Mono', monospace; font-size: 13px;
   }
   .tenant-bar input:focus { outline: none; border-color: var(--accent); }
+  .tenant-bar summary { cursor: pointer; font-size: 12.5px; color: var(--mute); }
+  .tenant-search-results { display: flex; flex-direction: column; gap: 6px; width: 100%; margin-top: 8px; }
+  .tenant-search-result { display: flex; justify-content: space-between; align-items: center; background: var(--surface-raised); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; cursor: pointer; }
+  .tenant-search-result:hover { border-color: var(--accent); }
+  .tenant-search-result .name { font-size: 13.5px; }
+  .tenant-search-result .id { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--mute-dim); }
 
   .panel { margin-bottom: 32px; }
   .panel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
@@ -98,6 +104,8 @@
   .msg.ok { color: var(--good); }
 
   .platform-buttons { display: flex; flex-wrap: wrap; gap: 10px; }
+  .platform-not-ready { display: flex; flex-direction: column; gap: 4px; max-width: 320px; }
+  .msg.warn { color: var(--accent); }
   .resource-list { display: flex; flex-direction: column; gap: 8px; }
   .resource-row {
     display: flex; align-items: center; justify-content: space-between; gap: 12px;
@@ -124,17 +132,29 @@
 
     <div class="topbar">
       <div>
-        <h1>Comptes sociaux</h1>
+        <h1 id="clientNameHeading">Comptes sociaux</h1>
         <div class="sub"><a href="/admin/index.html">← Contacts &amp; audits</a></div>
       </div>
       <button class="btn btn-ghost btn-sm" onclick="refresh()">Rafraîchir</button>
     </div>
 
-    <div class="tenant-bar">
-      <label for="tenantInput">tenant_id</label>
-      <input type="text" id="tenantInput" placeholder="ex : t_9f3a2b...">
-      <button class="btn btn-ghost btn-sm" id="loadTenantBtn">Charger</button>
+    <!-- H3-008D1M — §5 du mandat : l'identité MÉTIER du client (ex.
+         "Chap Chap") est l'élément principal, jamais le tenant_id
+         technique. Ce dernier reste accessible dans la zone avancée
+         repliée ci-dessous, jamais mis en avant. -->
+    <div class="tenant-bar" id="tenantSearchBar" style="display:none;">
+      <label for="tenantSearchInput">Rechercher un client</label>
+      <input type="text" id="tenantSearchInput" placeholder="Nom du client...">
+      <div id="tenantSearchResults" class="tenant-search-results"></div>
     </div>
+
+    <details class="tenant-bar" id="advancedTenantBar">
+      <summary>tenant_id (avancé)</summary>
+      <div style="display:flex;gap:10px;align-items:center;margin-top:10px;">
+        <input type="text" id="tenantInput" placeholder="ex : t_9f3a2b...">
+        <button class="btn btn-ghost btn-sm" id="loadTenantBtn">Charger</button>
+      </div>
+    </details>
 
     <!-- H3-008D1J — Connexion de plateforme GÉNÉRIQUE : les boutons ci-dessous
          sont générés depuis GET .../platform-connections/available (Registry
@@ -223,6 +243,9 @@ function renderSessionBar(){
     `;
     document.getElementById('pandoreLogoutBtn').addEventListener('click', pandoreLogout);
     loadPlatformButtons();
+    // H3-008D1M §5 — le sélecteur/recherche client n'a de sens QUE sans
+    // contexte tenant déjà résolu (arrivée directe sur cette page).
+    if(!currentTenantId()) loadTenantSearchList();
   } else {
     bar.innerHTML = `
       <div style="margin-bottom:6px;color:var(--mute,#8B909A);">Session Pandore requise pour connecter/sélectionner une plateforme (identité distincte du mot de passe d'accès à cette page).</div>
@@ -323,17 +346,89 @@ function showGate(withError){
   document.getElementById('gateErr').classList.toggle('show', !!withError);
 }
 
+// showDashboard — H3-008D1M §5/§6 : lorsqu'un tenant_id valide arrive par
+// lien (audit approuvé, sélection de recherche), le tenant est résolu et
+// les comptes/plateformes chargés AUTOMATIQUEMENT — aucun clic
+// supplémentaire "Charger" n'est nécessaire. L'ordre compte : tenantInput
+// doit être rempli AVANT renderSessionBar(), sinon loadPlatformButtons()
+// (appelé depuis une session Pandore déjà active) lirait un tenant_id
+// encore vide — c'était exactement le bug UX rapporté.
 function showDashboard(){
   document.getElementById('gate').style.display = 'none';
   document.getElementById('dashboard').classList.add('show');
-  renderSessionBar();
   const params = new URLSearchParams(location.search);
   const tenantId = params.get('tenant_id');
+  const clientNameParam = params.get('client_name');
   if(tenantId){
     document.getElementById('tenantInput').value = tenantId;
+    document.getElementById('tenantSearchBar').style.display = 'none';
+    setClientNameHeading(clientNameParam || tenantId);
+  } else {
+    setClientNameHeading('Comptes sociaux');
+    document.getElementById('tenantSearchBar').style.display = 'block';
+  }
+  renderSessionBar();
+  if(tenantId){
     refresh();
+    resolveAndShowClientName(tenantId);
   }
   maybeShowResourceSelection(params);
+}
+
+// setClientNameHeading — §5 du mandat : l'identité MÉTIER est l'élément
+// PRINCIPAL affiché, jamais l'identifiant technique en premier lieu.
+function setClientNameHeading(text){
+  document.getElementById('clientNameHeading').textContent = text;
+}
+
+// resolveAndShowClientName — résolution AUTORITAIRE (Pandore), remplace le
+// nom éventuellement passé en query string (qui n'est qu'un affichage
+// immédiat de confort, jamais une source de vérité). Échoue silencieusement
+// si aucune session Pandore n'est encore active — le nom de secours reste
+// affiché, jamais une erreur bloquante pour un simple affichage.
+async function resolveAndShowClientName(tenantId){
+  try{
+    const data = await apiWithPandoreSession(`/api/admin/tenants/${encodeURIComponent(tenantId)}`);
+    if(data && data.name) setClientNameHeading(data.name);
+  }catch{ /* session Pandore pas encore active, ou tenant inaccessible : nom de secours conservé */ }
+}
+
+// --- H3-008D1M §5 — sélecteur/recherche client (accès direct Super
+// Admin sans contexte tenant). allTenantsCache est rempli UNE FOIS par
+// session de page — la liste vient déjà scopée par rôle côté Go
+// (canAccessTenant), jamais un filtrage de confiance côté client. ---
+let allTenantsCache = null;
+
+async function loadTenantSearchList(){
+  try{
+    allTenantsCache = await apiWithPandoreSession('/api/admin/tenants');
+  }catch{ /* pas encore de session Pandore active : la recherche restera vide jusqu'à connexion */ }
+}
+
+function renderTenantSearchResults(){
+  const q = document.getElementById('tenantSearchInput').value.trim().toLowerCase();
+  const container = document.getElementById('tenantSearchResults');
+  if(!allTenantsCache || q.length === 0){ container.innerHTML = ''; return; }
+  const matches = allTenantsCache.filter(t => (t.name || '').toLowerCase().includes(q) || (t.id || '').toLowerCase().includes(q)).slice(0, 8);
+  container.innerHTML = matches.map(t => `
+    <div class="tenant-search-result" data-tenant-id="${esc(t.id)}" data-tenant-name="${esc(t.name)}">
+      <span class="name">${esc(t.name)}</span><span class="id">${esc(t.id)}</span>
+    </div>
+  `).join('');
+  container.querySelectorAll('[data-tenant-id]').forEach(el => {
+    el.addEventListener('click', () => selectTenantFromSearch(el.getAttribute('data-tenant-id'), el.getAttribute('data-tenant-name')));
+  });
+}
+
+// selectTenantFromSearch — navigation complète (pas un simple state JS) :
+// réutilise EXACTEMENT le même chemin qu'un lien entrant depuis une fiche
+// client (§6 du mandat : cohérence de navigation), jamais un second
+// mécanisme de résolution tenant divergent.
+function selectTenantFromSearch(tenantId, name){
+  const url = new URL(location.href);
+  url.searchParams.set('tenant_id', tenantId);
+  url.searchParams.set('client_name', name);
+  location.href = url.toString();
 }
 
 document.getElementById('loginBtn').addEventListener('click', tryLogin);
@@ -359,8 +454,29 @@ function currentTenantId(){
 
 document.getElementById('loadTenantBtn').addEventListener('click', refresh);
 document.getElementById('tenantInput').addEventListener('keydown', (e) => { if(e.key === 'Enter') refresh(); });
+document.getElementById('tenantSearchInput').addEventListener('input', renderTenantSearchResults);
 
 // --- H3-008D1J — connexion de plateforme générique ---
+
+// platformReadiness — H3-008D1M §7 : "CONFIGURED, ACTIVE ou CONNECTED ne
+// doivent jamais être synonymes." Distingue explicitement PLATFORM_CAPABILITY
+// (l'adaptateur EXISTE, déjà garanti par sa présence dans `available`) de
+// la précondition Niveau A (CLIENT_AUTHORIZATION/AUTONOMY_POLICY/
+// PUBLICATION_READINESS restent hors périmètre de ce lot — seule la
+// lecture Niveau A, la SEULE précondition que Pandore connaît déjà
+// aujourd'hui avant tout OAuth, §7 : "Pandore doit au minimum savoir que
+// sa Level-A configuration requise existe et est ACTIVE"). Fonction PURE,
+// testée directement.
+function platformReadiness(platformId, levelAByPlatform){
+  const levelA = levelAByPlatform[platformId];
+  if(!levelA || !levelA.configured){
+    return { ready: false, reason: 'Configuration Level A manquante — un PANDORE_SUPER_ADMIN doit la renseigner dans Intégrations plateforme.' };
+  }
+  if(levelA.status === 'DISABLED'){
+    return { ready: false, reason: 'Configuration Level A désactivée — un PANDORE_SUPER_ADMIN doit la réactiver dans Intégrations plateforme.' };
+  }
+  return { ready: true, reason: '' };
+}
 
 async function loadPlatformButtons(){
   const container = document.getElementById('platformButtons');
@@ -370,14 +486,29 @@ async function loadPlatformButtons(){
     return;
   }
   try{
-    const platforms = await apiWithPandoreSession(`/api/admin/tenants/${encodeURIComponent(tenantId)}/platform-connections/available`);
+    const [platforms, levelAList] = await Promise.all([
+      apiWithPandoreSession(`/api/admin/tenants/${encodeURIComponent(tenantId)}/platform-connections/available`),
+      // §7 — précondition Niveau A connue AVANT tout OAuth ; catalogue
+      // GÉNÉRIQUE déjà établi (H3-008D1K), jamais un second endpoint créé
+      // pour ce lot (LEVEL 1, aucune nouvelle capacité générique).
+      apiWithPandoreSession('/api/admin/platform-integrations').catch(() => []),
+    ]);
     if(!Array.isArray(platforms) || platforms.length === 0){
       container.innerHTML = '<span class="msg">Aucune plateforme disponible (aucun adaptateur avec support de connexion enregistré).</span>';
       return;
     }
-    container.innerHTML = platforms.map(p => `
-      <button class="btn btn-sm" data-platform="${esc(p.platform_id)}">Connecter ${esc(p.display_name)}</button>
-    `).join('');
+    const levelAByPlatform = {};
+    (Array.isArray(levelAList) ? levelAList : []).forEach(p => { levelAByPlatform[p.platform_id] = p; });
+    container.innerHTML = platforms.map(p => {
+      const readiness = platformReadiness(p.platform_id, levelAByPlatform);
+      if(readiness.ready){
+        return `<button class="btn btn-sm" data-platform="${esc(p.platform_id)}">Connecter ${esc(p.display_name)}</button>`;
+      }
+      return `<div class="platform-not-ready">
+        <button class="btn btn-sm" disabled title="${esc(readiness.reason)}">Connecter ${esc(p.display_name)}</button>
+        <div class="msg warn">${esc(readiness.reason)}</div>
+      </div>`;
+    }).join('');
     container.querySelectorAll('button[data-platform]').forEach(btn => {
       btn.addEventListener('click', () => connectPlatform(btn.getAttribute('data-platform')));
     });
@@ -386,6 +517,10 @@ async function loadPlatformButtons(){
   }
 }
 document.getElementById('loadTenantBtn').addEventListener('click', loadPlatformButtons);
+document.getElementById('loadTenantBtn').addEventListener('click', () => {
+  const id = currentTenantId();
+  if(id) resolveAndShowClientName(id);
+});
 
 // connectPlatform — GÉNÉRIQUE : `platform` est passé tel quel à Pandore,
 // jamais interprété ici. Ne construit AUCUNE URL d'autorisation —

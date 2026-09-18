@@ -53,6 +53,7 @@ function runScript() {
         return elements.get(id);
       },
       querySelectorAll: () => [],
+      addEventListener() {},
     },
     localStorage: fakeStorage(),
     sessionStorage: fakeStorage(),

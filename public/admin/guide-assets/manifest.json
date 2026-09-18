@@ -1,0 +1,74 @@
+[
+  {
+    "image_ref": "facebook/v1/10a-manage-everything-on-page.png",
+    "platform": "facebook",
+    "guide_version": "v1",
+    "steps": ["select_login_use_case"],
+    "verified_at": "2026-09-17",
+    "provenance": "REAL_MANUAL_SETUP",
+    "status": "CURRENT"
+  },
+  {
+    "image_ref": "facebook/v1/10b-customize-permissions.png",
+    "platform": "facebook",
+    "guide_version": "v1",
+    "steps": ["customize_login_permissions"],
+    "verified_at": "2026-09-17",
+    "provenance": "REAL_MANUAL_SETUP",
+    "status": "CURRENT"
+  },
+  {
+    "image_ref": "facebook/v1/10c-return-to-dashboard-and-reopen-login-product.png",
+    "platform": "facebook",
+    "guide_version": "v1",
+    "steps": ["return_to_dashboard_and_reopen_login_product"],
+    "verified_at": "2026-09-17",
+    "provenance": "REAL_MANUAL_SETUP",
+    "status": "CURRENT"
+  },
+  {
+    "image_ref": "facebook/v1/11-facebook-login-settings.png",
+    "platform": "facebook",
+    "guide_version": "v1",
+    "steps": ["open_settings"],
+    "verified_at": "2026-09-17",
+    "provenance": "REAL_MANUAL_SETUP",
+    "status": "CURRENT"
+  },
+  {
+    "image_ref": "facebook/v1/13-valid-oauth-redirect-uris-field.png",
+    "platform": "facebook",
+    "guide_version": "v1",
+    "steps": ["locate_redirect_uri_field"],
+    "verified_at": "2026-09-17",
+    "provenance": "REAL_MANUAL_SETUP",
+    "status": "CURRENT"
+  },
+  {
+    "image_ref": "facebook/v1/14-pandore-uri-saved.png",
+    "platform": "facebook",
+    "guide_version": "v1",
+    "steps": ["paste_in_meta", "save_meta_changes"],
+    "verified_at": "2026-09-17",
+    "provenance": "REAL_MANUAL_SETUP",
+    "status": "CURRENT"
+  },
+  {
+    "image_ref": "facebook/v1/15-redirect-uri-validator.png",
+    "platform": "facebook",
+    "guide_version": "v1",
+    "steps": ["locate_redirect_validator"],
+    "verified_at": "2026-09-17",
+    "provenance": "REAL_MANUAL_SETUP",
+    "status": "CURRENT"
+  },
+  {
+    "image_ref": "facebook/v1/16-verify-result-valid.png",
+    "platform": "facebook",
+    "guide_version": "v1",
+    "steps": ["click_verify"],
+    "verified_at": "2026-09-17",
+    "provenance": "REAL_MANUAL_SETUP",
+    "status": "CURRENT"
+  }
+]
