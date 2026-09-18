@@ -78,6 +78,40 @@ test('breadcrumb renders the requested hierarchy example: Clients & Prospects > 
   assert.ok(order[0] < order[1] && order[1] < order[2], 'ordre du fil d\'Ariane incorrect');
 });
 
+// --- H3-008D1N3 — le label de ZONE ("Clients & Prospects") ne doit
+// JAMAIS remplacer l'identité d'une SECTION FONCTIONNELLE existante
+// ("Contacts & Audits") : ce sont deux niveaux de hiérarchie distincts,
+// répondant à deux questions différentes (où suis-je globalement / que
+// suis-je en train de faire). ---
+
+test('index.html H1 identifies the functional section "Contacts & Audits", never the zone label', () => {
+  const html = fs.readFileSync(path.join(ADMIN_DIR, 'index.html'), 'utf8');
+  assert.ok(/<h1>Contacts &amp; Audits<\/h1>/.test(html), 'le H1 doit identifier la fonction (Contacts & Audits), pas la zone');
+  assert.ok(!/<h1>Clients &amp; Prospects<\/h1>/.test(html), 'le H1 ne doit jamais reprendre tel quel le libellé de zone');
+});
+
+test('index.html renders the exact breadcrumb "Clients & Prospects > Contacts & Audits" (zone kept, section made explicit)', () => {
+  const html = fs.readFileSync(path.join(ADMIN_DIR, 'index.html'), 'utf8');
+  const match = html.match(/AdminNav\.render\([^,]+,\s*(\{[\s\S]*?\})\s*\)/);
+  assert.ok(match, 'appel AdminNav.render introuvable dans index.html');
+  assert.ok(/zone:\s*'clients'/.test(match[1]), 'la zone doit rester clients (jamais renommée)');
+  assert.ok(/crumbs:\s*\[\s*\{\s*label:\s*'Contacts & Audits'\s*\}\s*\]/.test(match[1]), 'le fil d\'Ariane doit ajouter EXPLICITEMENT le segment "Contacts & Audits" après la zone — jamais crumbs: []');
+
+  const AdminNav = loadAdminNav();
+  const el = fakeElement();
+  AdminNav.render(el, { zone: 'clients', crumbs: [{ label: 'Contacts & Audits' }] });
+  const order = ['Clients &amp; Prospects', 'Contacts &amp; Audits'].map(l => el.innerHTML.indexOf(l));
+  assert.ok(order[0] !== -1 && order[1] !== -1, 'les deux segments (zone puis section) doivent être présents');
+  assert.ok(order[0] < order[1], 'la zone doit précéder la section dans le fil d\'Ariane');
+});
+
+test('the top-level zone tabs still show Clients & Prospects as active on the Contacts & Audits page (zone identity preserved)', () => {
+  const AdminNav = loadAdminNav();
+  const el = fakeElement();
+  AdminNav.render(el, { zone: 'clients', crumbs: [{ label: 'Contacts & Audits' }] });
+  assert.ok(el.innerHTML.includes('href="/admin/index.html" class="admin-zone-tab active"'), 'l\'onglet de zone Clients & Prospects doit rester actif même quand la section affichée est Contacts & Audits');
+});
+
 // --- 8/9/10 — générique, extensible, aucune connaissance client/plateforme. ---
 
 test('nav.js executable code contains no client-specific branch (no "Chap Chap", no hardcoded tenant UUID pattern)', () => {

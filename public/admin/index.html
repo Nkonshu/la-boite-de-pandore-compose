@@ -136,7 +136,7 @@
           </svg>
         </div>
         <div>
-          <h1>Clients &amp; Prospects</h1>
+          <h1>Contacts &amp; Audits</h1>
           <div class="sub">Messages de contact &amp; audits reçus</div>
         </div>
       </div>
@@ -206,7 +206,7 @@ function showGate(withError){
 function showDashboard(){
   document.getElementById('gate').style.display = 'none';
   document.getElementById('dashboard').classList.add('show');
-  AdminNav.render(document.getElementById('adminNav'), { zone: 'clients', crumbs: [] });
+  AdminNav.render(document.getElementById('adminNav'), { zone: 'clients', crumbs: [{ label: 'Contacts & Audits' }] });
   refreshAll();
 }
 
