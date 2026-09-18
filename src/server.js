@@ -348,17 +348,26 @@ app.get('/api/admin/audits', async (req, res) => {
   }
 });
 
-// toAdminAuditDetailView traduit {submission, draft} (Go, champs
-// PascalCase pour les deux types sans tags JSON propres — Proposition/
-// Feasibility/DataQualityFlags sont déjà en snake_case, définis avec leurs
-// propres tags) vers une forme homogène pour l'écran de revue.
+// toAdminAuditDetailView traduit {submission, draft, contact_name,
+// contact_email, business_identity_candidate,
+// business_identity_candidate_provenance} (Go, H3-008D1O1) vers une forme
+// homogène pour l'écran de revue. H3-008D1O1B — compose ne dérive PLUS
+// jamais name/email depuis RawAnswers.a0/a0b lui-même : le backend est seul
+// à connaître la sémantique de a0/a5 (contact vs identité métier) et
+// l'expose déjà comme des champs explicites au niveau racine de `data` —
+// ce fichier se contente de les relayer tels quels, jamais de les
+// recalculer. raw_answers reste exposé tel quel pour l'affichage générique
+// "Réponses brutes" (audit-review.html), qui n'attribue aucune sémantique
+// particulière à un champ précis.
 function toAdminAuditDetailView(data) {
   const s = data.submission || {};
   const d = data.draft || null;
   return {
     id: s.ID,
-    name: (s.RawAnswers || {}).a0 || '',
-    email: (s.RawAnswers || {}).a0b || '',
+    contact_name: data.contact_name || '',
+    contact_email: data.contact_email || '',
+    business_identity_candidate: data.business_identity_candidate || '',
+    business_identity_candidate_provenance: data.business_identity_candidate_provenance || '',
     status: s.Status,
     submitted_at: s.SubmittedAt,
     raw_answers: s.RawAnswers || {},
@@ -884,9 +893,12 @@ app.get('/api/admin/platform-integrations/:platform/guide', async (req, res) => 
 
 // toAdminTenantView traduit un core.Tenant (Go, PascalCase, pas de tags
 // JSON) vers le snake_case attendu par le frontend — même règle que
-// toAdminSocialAccountView ci-dessus.
+// toAdminSocialAccountView ci-dessus. version/updated_at/updated_by
+// (H3-008D1O1) sont désormais relayés : c'est ce qui permet à l'UI de
+// renommage (H3-008D1O1B) d'envoyer un expected_version à jour, jamais
+// deviné ni laissé à 0/1 par défaut.
 function toAdminTenantView(t) {
-  return { id: t.ID, name: t.Name, status: t.Status, created_at: t.CreatedAt };
+  return { id: t.ID, name: t.Name, status: t.Status, created_at: t.CreatedAt, version: t.Version, updated_at: t.UpdatedAt, updated_by: t.UpdatedBy };
 }
 
 // GET /api/admin/tenants/:id — résolution du nom métier du client (ex.
@@ -904,6 +916,35 @@ app.get('/api/admin/tenants/:id', async (req, res) => {
   } catch (err) {
     console.error('tenant detail proxy:', err.message);
     res.status(502).json({ error: 'Lecture impossible pour le moment' });
+  }
+});
+
+// PUT /api/admin/tenants/:id — H3-008D1O1B : relais THIN GÉNÉRIQUE vers
+// PUT /admin/tenants/{id} (Go, H3-008D1O1). Compose ne réinterprète JAMAIS
+// la sémantique d'identité (contact vs métier) ni la CAS elle-même : le
+// corps {name, expected_version} reçu du navigateur est transmis tel quel,
+// et c'est Pandore seul qui valide/persiste/incrémente la version ou
+// répond 409 en cas de conflit — relayé tel quel, jamais transformé en
+// autre chose ni retenté automatiquement ici. Générique par construction :
+// aucune connaissance de tenant/plateforme précis, réutilisable pour
+// n'importe quel Tenant.
+app.put('/api/admin/tenants/:id', async (req, res) => {
+  if (!checkAdmin(req, res)) return;
+  const authorization = requirePandoreBearer(req, res);
+  if (!authorization) return;
+  const { name, expected_version } = req.body || {};
+  try {
+    const goRes = await fetch(`${PANDORE_API_BASE}/admin/tenants/${encodeURIComponent(req.params.id)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: authorization },
+      body: JSON.stringify({ name: name || '', expected_version }),
+    });
+    const data = await goRes.json().catch(() => ({}));
+    if (!goRes.ok) return res.status(goRes.status).json(data);
+    res.status(goRes.status).json(toAdminTenantView(data));
+  } catch (err) {
+    console.error('tenant rename proxy:', err.message);
+    res.status(502).json({ error: 'Renommage impossible pour le moment' });
   }
 });
 

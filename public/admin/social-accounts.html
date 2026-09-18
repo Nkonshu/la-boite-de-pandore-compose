@@ -157,6 +157,26 @@
       </div>
     </details>
 
+    <!-- H3-008D1O1B — §4/§6 du mandat : seul chemin production (sans SQL/
+         SSH/curl/console) pour corriger l'identité d'affichage d'un Tenant
+         déjà approuvé, atteint depuis le contexte client déjà résolu ici —
+         jamais une section CRM séparée. Masqué tant qu'aucun tenant/
+         version n'est résolu (évite un renommage à l'aveugle sans CAS
+         connue). -->
+    <div class="panel" id="identityPanel" style="display:none;">
+      <div class="panel-head"><h2>Identité du client</h2></div>
+      <div id="identityView" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+        <span id="identityCurrentName" style="font-size:15px;"></span>
+        <button class="btn btn-ghost btn-sm" id="btnEditIdentity">Modifier</button>
+      </div>
+      <div id="identityEditForm" style="display:none;margin-top:12px;gap:8px;flex-wrap:wrap;align-items:center;">
+        <input type="text" id="identityNameInput" style="max-width:340px;background:var(--surface-raised);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-family:inherit;font-size:14px;">
+        <button class="btn btn-sm" id="btnSaveIdentity">Enregistrer</button>
+        <button class="btn btn-ghost btn-sm" id="btnCancelIdentity">Annuler</button>
+      </div>
+      <div class="msg" id="identityMsg"></div>
+    </div>
+
     <!-- H3-008D1J — Connexion de plateforme GÉNÉRIQUE : les boutons ci-dessous
          sont générés depuis GET .../platform-connections/available (Registry
          Pandore), jamais un bouton Facebook codé en dur dans ce fichier. -->
@@ -337,7 +357,13 @@ async function apiWithPandoreSession(path, opts = {}){
   const data = await res.json().catch(() => ({}));
   if(!res.ok){
     const message = (data && data.error && (data.error.message || data.error)) || `Erreur ${res.status}`;
-    throw new Error(message);
+    // H3-008D1O1B — status attaché à l'erreur : la CAS de renommage (§4 du
+    // mandat) a besoin de distinguer un conflit de version (409, jamais
+    // retenté automatiquement) de toute autre erreur, sans dupliquer cette
+    // fonction ni introduire un second mécanisme d'appel.
+    const err = new Error(message);
+    err.status = res.status;
+    throw err;
   }
   return data;
 }
@@ -402,6 +428,10 @@ function updateAdminNav(businessName){
 // immédiat de confort, jamais une source de vérité). Échoue silencieusement
 // si aucune session Pandore n'est encore active — le nom de secours reste
 // affiché, jamais une erreur bloquante pour un simple affichage.
+//
+// H3-008D1O1B — capture aussi Tenant.Version : c'est CETTE valeur, jamais
+// une version devinée/à 0/1 par défaut, qui sera envoyée comme
+// expected_version au premier renommage tenté (voir saveIdentity).
 async function resolveAndShowClientName(tenantId){
   try{
     const data = await apiWithPandoreSession(`/api/admin/tenants/${encodeURIComponent(tenantId)}`);
@@ -409,8 +439,89 @@ async function resolveAndShowClientName(tenantId){
       setClientNameHeading(data.name);
       updateAdminNav(data.name);
     }
+    if(data && typeof data.version === 'number'){
+      showIdentityPanel(data.name, data.version);
+    }
   }catch{ /* session Pandore pas encore active, ou tenant inaccessible : nom de secours conservé */ }
 }
+
+// --- H3-008D1O1B §4 — correction d'identité d'un Tenant existant (CAS) ---
+let currentTenantVersion = null;
+
+function showIdentityPanel(name, version){
+  currentTenantVersion = version;
+  document.getElementById('identityPanel').style.display = 'block';
+  document.getElementById('identityCurrentName').textContent = name;
+  document.getElementById('identityNameInput').value = name;
+}
+
+function showIdentityMsg(text, kind){
+  const el = document.getElementById('identityMsg');
+  el.className = kind ? `msg ${kind}` : 'msg';
+  el.textContent = text;
+}
+
+document.getElementById('btnEditIdentity').addEventListener('click', () => {
+  document.getElementById('identityView').style.display = 'none';
+  document.getElementById('identityEditForm').style.display = 'flex';
+  showIdentityMsg('', null);
+});
+
+document.getElementById('btnCancelIdentity').addEventListener('click', () => {
+  document.getElementById('identityNameInput').value = document.getElementById('identityCurrentName').textContent;
+  document.getElementById('identityEditForm').style.display = 'none';
+  document.getElementById('identityView').style.display = 'flex';
+  showIdentityMsg('', null);
+});
+
+// saveIdentity — envoie EXCLUSIVEMENT {name, expected_version} vers le
+// relais générique PUT /api/admin/tenants/:id (§4/§7 du mandat : Tenant.ID
+// reste dans l'URL, jamais recréé). Un conflit (409, expected_version
+// obsolète) est signalé explicitement à l'admin — JAMAIS retenté
+// automatiquement (§4 : "never silently overwrite after conflict") :
+// l'admin doit relire l'état courant (déjà rechargé ci-dessous) avant de
+// décider de réessayer lui-même.
+async function saveIdentity(){
+  const tenantId = currentTenantId();
+  const newName = document.getElementById('identityNameInput').value.trim();
+  const btn = document.getElementById('btnSaveIdentity');
+  if(!newName){
+    showIdentityMsg('Le nom du client est requis.', 'err');
+    return;
+  }
+  if(currentTenantVersion === null){
+    showIdentityMsg('Version du client inconnue — rechargez la page avant de réessayer.', 'err');
+    return;
+  }
+  btn.disabled = true;
+  try{
+    const data = await apiWithPandoreSession(`/api/admin/tenants/${encodeURIComponent(tenantId)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: newName, expected_version: currentTenantVersion }),
+    });
+    // Succès : la version RENVOYÉE par le backend remplace la locale
+    // (§4 : "replace local/displayed version with the returned version
+    // after success") — jamais un simple +1 côté client.
+    showIdentityPanel(data.name, data.version);
+    setClientNameHeading(data.name);
+    updateAdminNav(data.name);
+    document.getElementById('identityEditForm').style.display = 'none';
+    document.getElementById('identityView').style.display = 'flex';
+    showIdentityMsg('Nom du client mis à jour.', 'ok');
+  }catch(err){
+    if(err.status === 409){
+      showIdentityMsg('Conflit de version : ce client a été modifié entretemps. La version affichée a été rechargée — vérifiez le nom avant de réessayer.', 'err');
+      // Recharge l'état RÉEL (nom + version courants) sans jamais
+      // réappliquer automatiquement la tentative de l'admin.
+      resolveAndShowClientName(tenantId);
+    } else {
+      showIdentityMsg(err.message, 'err');
+    }
+  }
+  btn.disabled = false;
+}
+document.getElementById('btnSaveIdentity').addEventListener('click', saveIdentity);
 
 // --- H3-008D1M §5 — sélecteur/recherche client (accès direct Super
 // Admin sans contexte tenant). allTenantsCache est rempli UNE FOIS par

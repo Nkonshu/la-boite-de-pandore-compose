@@ -363,7 +363,17 @@ function renderFlags(flags){
   return `<div class="section"><h3>Alertes de cohérence (data quality flags)</h3>${items}</div>`;
 }
 
-function renderDraft(d, submissionName){
+// businessIdentityProvenanceLabel — H3-008D1O1B §3 : un candidat d'identité
+// métier n'est JAMAIS un fait externe vérifié tant qu'un admin ne l'a pas
+// confirmé — cette fonction traduit la provenance backend
+// (USER_DECLARED, seule valeur connue à ce jour) en un libellé humain,
+// jamais l'enum brut affiché tel quel à l'admin.
+function businessIdentityProvenanceLabel(provenance){
+  if(provenance === 'USER_DECLARED') return "Déclaré par le prospect dans l'audit — à vérifier et confirmer avant l'approbation.";
+  return '';
+}
+
+function renderDraft(d, data){
   if(!d){
     return `<div class="section"><h3>Analyse</h3><p style="color:var(--mute); font-size:14px;">Pas encore de résultat d'analyse pour cet audit (statut en cours, ou échec — voir « Relancer l'analyse »).</p></div>`;
   }
@@ -383,6 +393,15 @@ function renderDraft(d, submissionName){
     </div>
   ` : '';
 
+  // H3-008D1O1B §1/§2 — le nom pré-rempli ici vient EXCLUSIVEMENT du
+  // candidat d'identité métier fourni par le backend (jamais de
+  // data.contact_name, jamais d'un ancien champ générique "name", jamais
+  // d'une déduction depuis l'email) : ce champ reste VIDE si le backend ne
+  // fournit aucun candidat sûr — l'admin doit alors le saisir lui-même.
+  const candidate = data.business_identity_candidate || '';
+  const provenanceText = candidate ? businessIdentityProvenanceLabel(data.business_identity_candidate_provenance) : '';
+  const provenanceNote = provenanceText ? `<p class="missing" id="candidateProvenanceNote" style="margin-top:8px;">${esc(provenanceText)}</p>` : '';
+
   const approveForm = d.status !== 'v1' ? `
     <div class="actions">
       <button class="btn btn-sm" id="btnShowApprove">Approuver</button>
@@ -390,11 +409,15 @@ function renderDraft(d, submissionName){
       <button class="btn btn-ghost btn-sm" id="btnReprocess">Relancer l'analyse</button>
     </div>
     <div class="approve-form" id="approveForm">
-      <label for="tenantName">Nom du client (crée le compte à l'approbation)</label>
-      <input type="text" id="tenantName" value="${esc(submissionName)}">
+      <div class="section" style="background:var(--surface-raised); margin-bottom:14px;">
+        <h3>Identité client</h3>
+        <label for="tenantName">Nom du client (Tenant.Name) — confirmez ou corrigez avant l'approbation</label>
+        <input type="text" id="tenantName" value="${esc(candidate)}" placeholder="Nom du client à confirmer">
+        ${provenanceNote}
+      </div>
       <button class="btn btn-sm" id="btnConfirmApprove">Confirmer l'approbation</button>
     </div>
-  ` : `<div class="section"><h3>Statut</h3><p style="font-size:14px;">Approuvé le ${esc(fmtDate(d.approved_at))} par ${esc(d.approved_by)}. Client actif : <b>${esc(submissionName)}</b> <span style="color:var(--mute-dim,#5B616B);font-family:'IBM Plex Mono',monospace;font-size:11px;">(tenant_id: ${esc(d.tenant_id)})</span></p><p style="font-size:14px;"><a href="/admin/social-accounts.html?tenant_id=${encodeURIComponent(d.tenant_id)}&client_name=${encodeURIComponent(submissionName)}">Gérer les comptes sociaux →</a></p></div>`;
+  ` : `<div class="section"><h3>Statut</h3><p style="font-size:14px;">Approuvé le ${esc(fmtDate(d.approved_at))} par ${esc(d.approved_by)}. Client actif : <b id="approvedTenantName">${esc(d.tenant_id)}</b> <span style="color:var(--mute-dim,#5B616B);font-family:'IBM Plex Mono',monospace;font-size:11px;">(tenant_id: ${esc(d.tenant_id)})</span></p><p style="font-size:14px;"><a href="/admin/social-accounts.html?tenant_id=${encodeURIComponent(d.tenant_id)}">Gérer les comptes sociaux →</a></p></div>`;
 
   return `
     <div class="section">
@@ -416,25 +439,62 @@ function renderDraft(d, submissionName){
   `;
 }
 
+// H3-008D1O1B §1 — cette page ne connaît QUE les champs sémantiques
+// explicites renvoyés par le backend (contact_name/contact_email/
+// business_identity_candidate/...) : jamais RawAnswers.a0/a5 lus
+// directement ici pour en déduire une identité — raw_answers reste affiché
+// plus bas de façon strictement générique (aucun champ n'y est traité
+// spécialement).
 function render(){
   const data = currentDetail;
   const statusClass = data.draft ? data.draft.status.toLowerCase() : data.status.toLowerCase();
-  AdminNav.render(document.getElementById('adminNav'), { zone: 'clients', crumbs: [{ label: data.name || 'Prospect' }] });
+  const contactLabel = data.contact_name || 'Prospect';
+  AdminNav.render(document.getElementById('adminNav'), { zone: 'clients', crumbs: [{ label: contactLabel }] });
   document.getElementById('content').innerHTML = `
     <div class="header">
       <div>
-        <h1>${esc(data.name || 'Prospect')}</h1>
-        <div class="meta">${esc(data.email)} — reçu le ${esc(fmtDate(data.submitted_at))}</div>
+        <h1>${esc(contactLabel)}</h1>
+        <div class="meta">${esc(data.contact_email)} — reçu le ${esc(fmtDate(data.submitted_at))}</div>
       </div>
       <span class="status-pill ${statusClass}">${esc(STATUS_LABELS[data.status] || data.status)}</span>
+    </div>
+    <div class="section">
+      <h3>Contact</h3>
+      <dl class="kv">
+        <dt>Nom</dt><dd>${esc(data.contact_name) || '—'}</dd>
+        <dt>Email</dt><dd>${esc(data.contact_email) || '—'}</dd>
+      </dl>
     </div>
     <div class="section">
       <h3>Réponses brutes</h3>
       ${renderAnswers(data.raw_answers)}
     </div>
-    ${renderDraft(data.draft, data.name)}
+    ${renderDraft(data.draft, data)}
   `;
   wireActions();
+  // H3-008D1O1B §1 — une fois approuvé, le "Client actif" affiché doit
+  // être l'identité RÉELLEMENT persistée dans Tenant.Name (résolue via
+  // Pandore), jamais rejouer contact_name/business_identity_candidate en
+  // mémoire : un renommage ultérieur (H3-008D1O1B §4) doit se refléter ici
+  // à la prochaine consultation, jamais une valeur figée au moment de
+  // l'approbation.
+  if(data.draft && data.draft.status === 'v1' && data.draft.tenant_id){
+    resolveApprovedTenantName(data.draft.tenant_id);
+  }
+}
+
+async function resolveApprovedTenantName(tenantId){
+  const session = getPandoreSession();
+  if(!session || !session.token) return;
+  try{
+    const res = await api(`/api/admin/tenants/${encodeURIComponent(tenantId)}`, {
+      headers: { Authorization: `Bearer ${session.token}` },
+    });
+    if(!res.ok) return;
+    const tenant = await res.json();
+    const el = document.getElementById('approvedTenantName');
+    if(el && tenant && tenant.name) el.textContent = tenant.name;
+  }catch{ /* pas de session Pandore active ou tenant inaccessible : le repli tenant_id reste affiché */ }
 }
 
 function showMsg(text, ok){
