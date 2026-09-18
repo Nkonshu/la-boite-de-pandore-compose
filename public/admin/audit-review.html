@@ -147,11 +147,15 @@
   <div class="wrap" style="padding-bottom:0;">
     <div id="pandoreSessionBar" style="margin:16px 0;padding:10px 14px;background:var(--surface,#14171C);border:1px solid var(--border,#262B33);border-radius:10px;font-size:13px;"></div>
   </div>
+  <div class="wrap">
+    <div id="adminNav"></div>
+  </div>
   <div class="wrap" id="content">
     <div class="state" id="loading">Chargement...</div>
   </div>
 </div>
 
+<script src="/admin/nav.js"></script>
 <script>
 const PW_KEY = 'pandore_admin_pw';
 
@@ -415,8 +419,8 @@ function renderDraft(d, submissionName){
 function render(){
   const data = currentDetail;
   const statusClass = data.draft ? data.draft.status.toLowerCase() : data.status.toLowerCase();
+  AdminNav.render(document.getElementById('adminNav'), { zone: 'clients', crumbs: [{ label: data.name || 'Prospect' }] });
   document.getElementById('content').innerHTML = `
-    <a class="back" href="/admin/">&larr; Retour au tableau de bord</a>
     <div class="header">
       <div>
         <h1>${esc(data.name || 'Prospect')}</h1>

@@ -144,10 +144,12 @@
   <div class="wrap">
     <div id="pandoreSessionBar" style="margin-bottom:24px;padding:10px 14px;background:var(--surface);border:1px solid var(--border);border-radius:10px;font-size:13px;"></div>
 
+    <div id="adminNav"></div>
+
     <div class="topbar">
       <div>
         <h1>Intégrations plateforme</h1>
-        <div class="sub"><a href="/admin/index.html">← Contacts &amp; audits</a></div>
+        <div class="sub">Configuration Pandore ↔ plateforme externe — jamais propre à un client</div>
       </div>
       <button class="btn btn-ghost btn-sm" id="refreshBtn">Rafraîchir</button>
     </div>
@@ -207,6 +209,7 @@
   </div>
 </div>
 
+<script src="/admin/nav.js"></script>
 <script>
 const PW_KEY = 'pandore_admin_pw';
 // F0.2 — même pont d'identité que social-accounts.html/audit-review.html
@@ -333,6 +336,7 @@ function showGate(withError){
 function showDashboard(){
   document.getElementById('gate').style.display = 'none';
   document.getElementById('dashboard').classList.add('show');
+  AdminNav.render(document.getElementById('adminNav'), { zone: 'administration', crumbs: [{ label: 'Intégrations plateforme' }] });
   renderSessionBar();
 }
 

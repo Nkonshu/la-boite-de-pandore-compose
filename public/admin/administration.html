@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Administration — La Boîte de Pandore</title>
+<meta name="robots" content="noindex">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg?v=2">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0B0D10;
+    --surface: #14171C;
+    --surface-raised: #1C2027;
+    --accent: #E8A33D;
+    --good: #3DBD8C;
+    --bad: #E2685A;
+    --text: #F3F1EC;
+    --mute: #8B909A;
+    --mute-dim: #5B616B;
+    --border: #262B33;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'IBM Plex Sans', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1, h2, h3 { font-family: 'Instrument Sans', 'IBM Plex Sans', sans-serif; margin: 0; }
+  a { color: var(--accent); }
+
+  .gate { min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+  .gate-box { width: 100%; max-width: 360px; padding: 24px; }
+  .gate-box h1 { font-size: 22px; margin-bottom: 20px; }
+  .mark { width: 36px; height: 36px; margin-bottom: 16px; }
+  .mark svg { width: 100%; height: 100%; }
+  .mark.mark-sm { width: 28px; height: 28px; margin-bottom: 0; }
+  .topbar-brand { display: flex; align-items: center; gap: 12px; }
+  .gate-box input {
+    width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 13px 14px; color: var(--text); font-family: inherit; font-size: 15px; margin-bottom: 14px;
+  }
+  .gate-box input:focus { outline: none; border-color: var(--accent); }
+  .gate-box .err { color: var(--bad); font-size: 13px; margin-bottom: 12px; display: none; }
+  .gate-box .err.show { display: block; }
+
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    background: var(--accent); color: #201404; font-weight: 700; font-size: 14px;
+    padding: 11px 22px; border-radius: 999px; border: none; cursor: pointer;
+  }
+  .btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--text); font-weight: 600; }
+  .btn-sm { padding: 6px 14px; font-size: 12.5px; }
+
+  #dashboard { display: none; }
+  #dashboard.show { display: block; }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 40px 24px 90px; }
+  .topbar { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 32px; flex-wrap: wrap; gap: 12px; }
+  .topbar h1 { font-size: 24px; font-weight: 700; }
+  .topbar .sub { font-size: 13px; color: var(--mute-dim); }
+
+  .panel { margin-bottom: 44px; }
+  .panel h2 {
+    font-family: 'IBM Plex Mono', monospace; font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--accent); margin-bottom: 14px;
+  }
+
+  .config-card {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px;
+  }
+  .config-card .label { font-size: 15px; font-weight: 600; }
+  .config-card .desc { font-size: 13px; color: var(--mute); margin-top: 4px; }
+</style>
+</head>
+<body>
+
+<div class="gate" id="gate">
+  <div class="gate-box">
+    <div class="mark">
+      <svg viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <g stroke="#E8A33D" stroke-width="4" stroke-linecap="round" opacity="0.55">
+          <line x1="62" y1="34" x2="52" y2="10"/>
+          <line x1="62" y1="34" x2="63" y2="6"/>
+          <line x1="62" y1="34" x2="74" y2="12"/>
+        </g>
+        <circle cx="62" cy="36" r="16" fill="#E8A33D" opacity="0.18"/>
+        <circle cx="62" cy="36" r="7" fill="#E8A33D" opacity="0.7"/>
+        <rect x="0" y="0" width="58" height="14" rx="3" fill="none" stroke="#E8A33D" stroke-width="6" transform="translate(18 46) rotate(-16)"/>
+        <rect x="28" y="54" width="64" height="46" rx="4" fill="none" stroke="#E8A33D" stroke-width="6"/>
+      </svg>
+    </div>
+    <h1>Administration — La Boîte de Pandore</h1>
+    <input type="password" id="pwInput" placeholder="Mot de passe" autocomplete="current-password">
+    <div class="err" id="gateErr">Mot de passe incorrect.</div>
+    <button class="btn" id="loginBtn" style="width:100%">Se connecter</button>
+  </div>
+</div>
+
+<div id="dashboard">
+  <div class="wrap">
+    <div class="topbar">
+      <div class="topbar-brand">
+        <div class="mark mark-sm">
+          <svg viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <g stroke="#E8A33D" stroke-width="4" stroke-linecap="round" opacity="0.55">
+              <line x1="62" y1="34" x2="52" y2="10"/>
+              <line x1="62" y1="34" x2="63" y2="6"/>
+              <line x1="62" y1="34" x2="74" y2="12"/>
+            </g>
+            <circle cx="62" cy="36" r="16" fill="#E8A33D" opacity="0.18"/>
+            <circle cx="62" cy="36" r="7" fill="#E8A33D" opacity="0.7"/>
+            <rect x="0" y="0" width="58" height="14" rx="3" fill="none" stroke="#E8A33D" stroke-width="6" transform="translate(18 46) rotate(-16)"/>
+            <rect x="28" y="54" width="64" height="46" rx="4" fill="none" stroke="#E8A33D" stroke-width="6"/>
+          </svg>
+        </div>
+        <div>
+          <h1>Administration</h1>
+          <div class="sub">Configuration globale de Pandore</div>
+        </div>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="refreshOpsGaps()">Rafraîchir</button>
+    </div>
+
+    <div id="adminNav"></div>
+
+    <div id="opsGapsPanel" class="panel" style="display:none;">
+      <h2>À finaliser</h2>
+      <div id="opsGapsList" style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;font-size:13.5px;color:var(--mute);"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Configuration</h2>
+      <div class="config-card">
+        <div>
+          <div class="label">Intégrations plateforme</div>
+          <div class="desc">Facebook et tout autre adaptateur enregistré — configuration technique Pandore ↔ plateforme externe, jamais propre à un client.</div>
+        </div>
+        <a href="/admin/platform-integrations.html" class="btn btn-sm">Ouvrir →</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/admin/nav.js"></script>
+<script>
+const PW_KEY = 'pandore_admin_pw';
+
+function esc(s){
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+async function api(path, opts = {}){
+  const pw = localStorage.getItem(PW_KEY) || '';
+  const res = await fetch(path, {
+    ...opts,
+    headers: { ...(opts.headers || {}), 'x-admin-password': pw },
+  });
+  if(res.status === 401){
+    localStorage.removeItem(PW_KEY);
+    showGate(true);
+    throw new Error('unauthorized');
+  }
+  return res.json();
+}
+
+function showGate(withError){
+  document.getElementById('gate').style.display = 'flex';
+  document.getElementById('dashboard').classList.remove('show');
+  document.getElementById('gateErr').classList.toggle('show', !!withError);
+}
+
+function showDashboard(){
+  document.getElementById('gate').style.display = 'none';
+  document.getElementById('dashboard').classList.add('show');
+  AdminNav.render(document.getElementById('adminNav'), { zone: 'administration', crumbs: [] });
+  refreshOpsGaps();
+}
+
+document.getElementById('loginBtn').addEventListener('click', tryLogin);
+document.getElementById('pwInput').addEventListener('keydown', (e) => { if(e.key === 'Enter') tryLogin(); });
+
+async function tryLogin(){
+  const pw = document.getElementById('pwInput').value;
+  localStorage.setItem(PW_KEY, pw);
+  try{
+    await api('/api/admin/platform-status');
+    showDashboard();
+  }catch(err){
+    showGate(true);
+  }
+}
+
+// refreshOpsGaps — suivi visible de ce qu'il reste à configurer pour que
+// Pandore soit pleinement opérationnel (voir GET /admin/status côté Go) —
+// déplacé tel quel depuis index.html (H3-008D1N1) : ceci est une
+// configuration GLOBALE Pandore, jamais propre à un tenant, elle
+// n'appartenait donc pas conceptuellement à l'écran Clients & Prospects.
+// Échec silencieux volontaire (panel non affiché) : cette lecture ne doit
+// jamais empêcher le reste de cette page de fonctionner si le backend
+// Platform Engine n'est pas joignable pour une raison quelconque.
+async function refreshOpsGaps(){
+  const panel = document.getElementById('opsGapsPanel');
+  const list = document.getElementById('opsGapsList');
+  try{
+    const status = await api('/api/admin/platform-status');
+    const gaps = [];
+    const pe = status.platform_engine || {};
+    if(!pe.meta_configured){
+      gaps.push('Intégration Meta (Facebook/Instagram) non configurée — META_APP_ID/META_APP_SECRET manquants ou invalides côté VPS (.env.remote).');
+    }
+    if(!pe.token_encryption_configured){
+      gaps.push('Clé de chiffrement des tokens absente — PANDORE_TOKEN_ENCRYPTION_KEY manquante côté VPS (.env.remote), la connexion de comptes restera refusée tant qu\'elle ne l\'est pas.');
+    }
+    if(gaps.length === 0){
+      panel.style.display = 'none';
+      return;
+    }
+    list.innerHTML = gaps.map(g => `<div style="margin-bottom:6px;">⚠️ ${esc(g)}</div>`).join('');
+    panel.style.display = 'block';
+  }catch(err){
+    panel.style.display = 'none';
+  }
+}
+
+(async function init(){
+  if(localStorage.getItem(PW_KEY)){
+    try{
+      await api('/api/admin/platform-status');
+      showDashboard();
+    }catch(err){
+      showGate(false);
+    }
+  } else {
+    showGate(false);
+  }
+})();
+</script>
+</body>
+</html>

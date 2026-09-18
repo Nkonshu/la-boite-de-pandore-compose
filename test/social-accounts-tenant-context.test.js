@@ -20,6 +20,10 @@ if (!scriptMatch) {
   throw new Error('social-accounts.html: <script> introuvable — le fichier a-t-il changé de structure ?');
 }
 const scriptSource = scriptMatch[1];
+// H3-008D1N1 — nav.js RÉEL (jamais un stub) chargé dans le même contexte,
+// exactement l'ordre <script src="/admin/nav.js"> puis <script> inline
+// tel que servi en production.
+const navSource = fs.readFileSync(path.join(__dirname, '..', 'public', 'admin', 'nav.js'), 'utf8');
 
 function fakeElement(initial) {
   return Object.assign({
@@ -72,7 +76,10 @@ function runPage({ search, pandoreSession, adminPassword, fetchImpl }) {
       return fetchImpl(String(url), opts || {});
     },
   };
+  sandbox.window = sandbox;
+  sandbox.document.head = { appendChild() {} };
   vm.createContext(sandbox);
+  vm.runInContext(navSource, sandbox);
   vm.runInContext(scriptSource, sandbox);
   sandbox.__elements = elements;
   sandbox.__calls = calls;

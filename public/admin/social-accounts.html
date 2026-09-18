@@ -130,10 +130,11 @@
   <div class="wrap">
     <div id="pandoreSessionBar" style="margin-bottom:24px;padding:10px 14px;background:var(--surface);border:1px solid var(--border);border-radius:10px;font-size:13px;"></div>
 
+    <div id="adminNav"></div>
+
     <div class="topbar">
       <div>
         <h1 id="clientNameHeading">Comptes sociaux</h1>
-        <div class="sub"><a href="/admin/index.html">← Contacts &amp; audits</a></div>
       </div>
       <button class="btn btn-ghost btn-sm" onclick="refresh()">Rafraîchir</button>
     </div>
@@ -196,6 +197,7 @@
   </div>
 </div>
 
+<script src="/admin/nav.js"></script>
 <script>
 const PW_KEY = 'pandore_admin_pw';
 // F0.2 — même pont d'identité que audit-review.html (repo compose) :
@@ -363,8 +365,10 @@ function showDashboard(){
     document.getElementById('tenantInput').value = tenantId;
     document.getElementById('tenantSearchBar').style.display = 'none';
     setClientNameHeading(clientNameParam || tenantId);
+    updateAdminNav(clientNameParam || tenantId);
   } else {
     setClientNameHeading('Comptes sociaux');
+    updateAdminNav(null);
     document.getElementById('tenantSearchBar').style.display = 'block';
   }
   renderSessionBar();
@@ -381,6 +385,18 @@ function setClientNameHeading(text){
   document.getElementById('clientNameHeading').textContent = text;
 }
 
+// updateAdminNav — H3-008D1N1 : fil d'Ariane "Clients & Prospects > <nom
+// métier> > Comptes sociaux" (voir nav.js). Sans businessName résolu
+// (pas encore de contexte tenant), le segment intermédiaire est
+// simplement omis — jamais un tenant_id ni un libellé fabriqué. Le
+// segment nom métier n'est jamais un lien : aucune page "fiche client"
+// séparée n'existe aujourd'hui (§ mandat : ne pas créer de section vide),
+// cette page EST déjà le contexte client courant.
+function updateAdminNav(businessName){
+  const crumbs = businessName ? [{ label: businessName }, { label: 'Comptes sociaux' }] : [{ label: 'Comptes sociaux' }];
+  AdminNav.render(document.getElementById('adminNav'), { zone: 'clients', crumbs });
+}
+
 // resolveAndShowClientName — résolution AUTORITAIRE (Pandore), remplace le
 // nom éventuellement passé en query string (qui n'est qu'un affichage
 // immédiat de confort, jamais une source de vérité). Échoue silencieusement
@@ -389,7 +405,10 @@ function setClientNameHeading(text){
 async function resolveAndShowClientName(tenantId){
   try{
     const data = await apiWithPandoreSession(`/api/admin/tenants/${encodeURIComponent(tenantId)}`);
-    if(data && data.name) setClientNameHeading(data.name);
+    if(data && data.name){
+      setClientNameHeading(data.name);
+      updateAdminNav(data.name);
+    }
   }catch{ /* session Pandore pas encore active, ou tenant inaccessible : nom de secours conservé */ }
 }
 
