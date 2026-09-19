@@ -91,6 +91,7 @@
   tr:last-child td { border-bottom: none; }
   td.date { color: var(--mute-dim); white-space: nowrap; font-family: 'IBM Plex Mono', monospace; font-size: 12px; }
   td.scopes { color: var(--mute); font-size: 12px; }
+  .attempt-note { color: var(--mute); font-size: 12px; margin-top: 4px; }
 
   .pill { display: inline-block; font-family: 'IBM Plex Mono', monospace; font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 999px; text-transform: uppercase; letter-spacing: 0.04em; }
   .pill.connected { background: rgba(61,189,140,0.14); color: var(--good); }
@@ -868,18 +869,52 @@ const CAPABILITY_STATE_LABEL = {
   UNSUPPORTED: 'Non supportée', UNKNOWN: 'Inconnue',
 };
 
-function renderCapabilityCell(records, tenantId, socialAccountId){
+// H3-008D1Q15 — ferme le READ_MODEL_GAP identifié par l'audit H3-008D1Q14 :
+// jusqu'ici, l'issue d'une revalidation n'existait que dans la réponse
+// POST transitoire — un rechargement de page, un nouvel onglet ou une
+// visite ultérieure ne pouvait plus jamais la reconstruire. Une liste vide
+// (attempt.exists === false) est un résultat NORMAL — "jamais encore
+// revérifié" — jamais une erreur affichée à l'opérateur, même discipline
+// que fetchGrantedCapabilities ci-dessus.
+async function fetchLatestAttempt(tenantId, socialAccountId){
+  try{
+    return await apiWithPandoreSession(`/api/admin/tenants/${encodeURIComponent(tenantId)}/social-accounts/${encodeURIComponent(socialAccountId)}/capabilities/latest-attempt`);
+  }catch(err){
+    return null; // session absente/expirée ou droits insuffisants : affiché comme non disponible, jamais fabriqué
+  }
+}
+
+// describeLatestAttemptLine — rend l'issue de la DERNIÈRE tentative
+// SÉPARÉMENT de l'état autoritaire (le pill ci-dessus) : jamais fusionnés
+// (§1/§6 du mandat H3-008D1Q15). Une ligne historique H3-008D1Q5/Q9
+// (aucune observation Q11 associée) reste honnête sur l'absence de détail
+// — jamais interprétée comme une confirmation ni comme un échec.
+function describeLatestAttemptLine(attempt){
+  if(!attempt || !attempt.exists) return '';
+  const when = esc(fmtDate(attempt.triggered_at));
+  const observation = (attempt.observations || []).find(o => o.capability === 'PUBLISH_TEXT');
+  if(!observation){
+    return `<div class="attempt-note">Dernière tentative : ${when} (détail non disponible)</div>`;
+  }
+  if(observation.applied){
+    return `<div class="attempt-note">Dernière revérification : concluante (${when})</div>`;
+  }
+  return `<div class="attempt-note">Dernière revérification : non concluante — état précédent conservé (${when})</div>`;
+}
+
+function renderCapabilityCell(records, latestAttempt, tenantId, socialAccountId){
   const button = `<button class="btn btn-ghost btn-sm" style="margin-left:6px;" onclick="revalidateCapabilities('${esc(tenantId)}','${esc(socialAccountId)}')">Revérifier les capacités</button>`;
+  const attemptLine = describeLatestAttemptLine(latestAttempt);
   if(records === null){
-    return '<span class="pill cap-unverified">Non vérifiable</span>' + button;
+    return '<span class="pill cap-unverified">Non vérifiable</span>' + button + attemptLine;
   }
   const publish = records.find(r => r.capability === 'PUBLISH_TEXT');
   if(!publish){
-    return '<span class="pill cap-unverified">Jamais vérifiée</span>' + button;
+    return '<span class="pill cap-unverified">Jamais vérifiée</span>' + button + attemptLine;
   }
   const cls = 'cap-' + publish.state.toLowerCase();
   const label = CAPABILITY_STATE_LABEL[publish.state] || publish.state;
-  return `<span class="pill ${esc(cls)}" title="Publication texte — vérifié ${esc(fmtDate(publish.verified_at))}">${esc(label)}</span>` + button;
+  return `<span class="pill ${esc(cls)}" title="Publication texte — vérifié ${esc(fmtDate(publish.verified_at))}">${esc(label)}</span>` + button + attemptLine;
 }
 
 // H3-008D1Q11 §8 — la réponse distingue désormais explicitement A. l'état
@@ -932,17 +967,21 @@ async function render(accounts, tenantId){
   }
   const sorted = [...accounts].sort((a,b) => new Date(b.connected_at) - new Date(a.connected_at));
   // Résolution en parallèle, une lecture par compte — jamais bloquant pour
-  // l'affichage des colonnes déjà connues (statut/scopes demandés).
-  const capabilitiesByAccount = await Promise.all(
-    sorted.map(a => a.status === 'CONNECTED' ? fetchGrantedCapabilities(tenantId, a.id) : Promise.resolve(null))
-  );
+  // l'affichage des colonnes déjà connues (statut/scopes demandés). H3-008D1Q15 :
+  // l'état autoritaire (capabilitiesByAccount) et l'issue de la dernière
+  // tentative (latestAttemptByAccount) sont deux lectures DISTINCTES,
+  // jamais fusionnées en une seule requête.
+  const [capabilitiesByAccount, latestAttemptByAccount] = await Promise.all([
+    Promise.all(sorted.map(a => a.status === 'CONNECTED' ? fetchGrantedCapabilities(tenantId, a.id) : Promise.resolve(null))),
+    Promise.all(sorted.map(a => a.status === 'CONNECTED' ? fetchLatestAttempt(tenantId, a.id) : Promise.resolve(null))),
+  ]);
   tbody.innerHTML = sorted.map((a, i) => `
     <tr>
       <td><span class="pill platform-${esc(a.platform)}">${esc(a.platform)}</span></td>
       <td>${esc(a.display_name || a.external_account_id)}</td>
       <td><span class="pill ${a.status === 'CONNECTED' ? 'connected' : 'revoked'}">${a.status === 'CONNECTED' ? 'connecté' : 'révoqué'}</span></td>
       <td class="scopes">${(a.granted_scopes || []).map(esc).join(', ') || '—'}</td>
-      <td>${a.status === 'CONNECTED' ? renderCapabilityCell(capabilitiesByAccount[i], tenantId, a.id) : '—'}</td>
+      <td>${a.status === 'CONNECTED' ? renderCapabilityCell(capabilitiesByAccount[i], latestAttemptByAccount[i], tenantId, a.id) : '—'}</td>
       <td class="date">${fmtDate(a.connected_at)}</td>
       <td>${a.status === 'CONNECTED'
         ? `<button class="btn btn-danger btn-sm" onclick="revoke('${esc(a.id)}')">Révoquer</button>`
