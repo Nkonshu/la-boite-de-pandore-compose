@@ -834,6 +834,28 @@ app.get('/api/admin/tenants/:id/social-accounts/:social_account_id/granted-capab
   }
 });
 
+// POST /api/admin/tenants/:id/social-accounts/:social_account_id/capabilities/revalidate
+// — H3-008D1Q3 : déclenchement générique d'une revalidation de capacités
+// (jamais un endpoint Facebook/debug_token — délègue entièrement, côté Go,
+// à internal/grantedcapability.Resolve). Même identité Bearer Pandore que
+// la lecture granted-capabilities ci-dessus, jamais x-internal-secret.
+app.post('/api/admin/tenants/:id/social-accounts/:social_account_id/capabilities/revalidate', async (req, res) => {
+  if (!checkAdmin(req, res)) return;
+  const authorization = requirePandoreBearer(req, res);
+  if (!authorization) return;
+  try {
+    const goRes = await fetch(`${PANDORE_API_BASE}/admin/tenants/${encodeURIComponent(req.params.id)}/social-accounts/${encodeURIComponent(req.params.social_account_id)}/capabilities/revalidate`, {
+      method: 'POST',
+      headers: { Authorization: authorization },
+    });
+    const data = await goRes.json().catch(() => ({}));
+    res.status(goRes.status).json(data);
+  } catch (err) {
+    console.error('capabilities revalidate proxy:', err.message);
+    res.status(502).json({ error: 'Revérification impossible pour le moment' });
+  }
+});
+
 // --- H3-008D1K — Platform Integration Configuration (Niveau A) : relais
 // THIN GÉNÉRIQUE vers GET/PUT /admin/platform-integrations[/:platform]
 // (Go, H3-008D1G/H3-008D1I, déjà génériques et schema-driven — aucun champ

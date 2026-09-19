@@ -868,17 +868,36 @@ const CAPABILITY_STATE_LABEL = {
   UNSUPPORTED: 'Non supportée', UNKNOWN: 'Inconnue',
 };
 
-function renderCapabilityCell(records){
+function renderCapabilityCell(records, tenantId, socialAccountId){
+  const button = `<button class="btn btn-ghost btn-sm" style="margin-left:6px;" onclick="revalidateCapabilities('${esc(tenantId)}','${esc(socialAccountId)}')">Revérifier les capacités</button>`;
   if(records === null){
-    return '<span class="pill cap-unverified">Non vérifiable</span>';
+    return '<span class="pill cap-unverified">Non vérifiable</span>' + button;
   }
   const publish = records.find(r => r.capability === 'PUBLISH_TEXT');
   if(!publish){
-    return '<span class="pill cap-unverified">Jamais vérifiée</span>';
+    return '<span class="pill cap-unverified">Jamais vérifiée</span>' + button;
   }
   const cls = 'cap-' + publish.state.toLowerCase();
   const label = CAPABILITY_STATE_LABEL[publish.state] || publish.state;
-  return `<span class="pill ${esc(cls)}" title="Publication texte — vérifié ${esc(fmtDate(publish.verified_at))}">${esc(label)}</span>`;
+  return `<span class="pill ${esc(cls)}" title="Publication texte — vérifié ${esc(fmtDate(publish.verified_at))}">${esc(label)}</span>` + button;
+}
+
+// H3-008D1Q3 — GÉNÉRIQUE : ne connaît aucune plateforme par son nom, ne
+// fait que déclencher l'orchestration existante et rafraîchir l'affichage
+// déjà générique ci-dessus (§UI du mandat : "sans branchement spécifique à
+// une plateforme"). Même patron d'appel/erreur que
+// selectResource/apiWithPandoreSession.
+async function revalidateCapabilities(tenantId, socialAccountId){
+  const msgEl = document.getElementById('actionMsg');
+  try{
+    await apiWithPandoreSession(`/api/admin/tenants/${encodeURIComponent(tenantId)}/social-accounts/${encodeURIComponent(socialAccountId)}/capabilities/revalidate`, { method: 'POST' });
+    msgEl.className = 'msg ok';
+    msgEl.textContent = 'Capacités revérifiées.';
+    refresh();
+  }catch(err){
+    msgEl.className = 'msg err';
+    msgEl.textContent = err.message;
+  }
 }
 
 async function render(accounts, tenantId){
@@ -899,7 +918,7 @@ async function render(accounts, tenantId){
       <td>${esc(a.display_name || a.external_account_id)}</td>
       <td><span class="pill ${a.status === 'CONNECTED' ? 'connected' : 'revoked'}">${a.status === 'CONNECTED' ? 'connecté' : 'révoqué'}</span></td>
       <td class="scopes">${(a.granted_scopes || []).map(esc).join(', ') || '—'}</td>
-      <td>${a.status === 'CONNECTED' ? renderCapabilityCell(capabilitiesByAccount[i]) : '—'}</td>
+      <td>${a.status === 'CONNECTED' ? renderCapabilityCell(capabilitiesByAccount[i], tenantId, a.id) : '—'}</td>
       <td class="date">${fmtDate(a.connected_at)}</td>
       <td>${a.status === 'CONNECTED'
         ? `<button class="btn btn-danger btn-sm" onclick="revoke('${esc(a.id)}')">Révoquer</button>`
