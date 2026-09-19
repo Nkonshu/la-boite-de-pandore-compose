@@ -856,6 +856,32 @@ app.post('/api/admin/tenants/:id/social-accounts/:social_account_id/capabilities
   }
 });
 
+// GET /api/admin/tenants/:id/social-accounts/:social_account_id/capabilities/latest-attempt
+// — H3-008D1Q15/H3-008D1Q16C : lecture de la DERNIÈRE tentative de
+// revalidation déjà persistée (jamais un nouvel appel provider — le
+// handler Go correspondant n'invoque structurellement aucun
+// CapabilityProvider). Ce relais avait été omis lors de l'introduction du
+// endpoint Go en H3-008D1Q15 : le frontend appelait déjà cette route, le
+// backend Go l'exposait déjà, mais Compose ne la relayait pas — chaque
+// appel recevait donc le 404 par défaut d'Express, silencieusement avalé
+// côté frontend (voir fetchLatestAttempt). Même identité Bearer Pandore
+// que la lecture granted-capabilities ci-dessus, jamais x-internal-secret.
+app.get('/api/admin/tenants/:id/social-accounts/:social_account_id/capabilities/latest-attempt', async (req, res) => {
+  if (!checkAdmin(req, res)) return;
+  const authorization = requirePandoreBearer(req, res);
+  if (!authorization) return;
+  try {
+    const goRes = await fetch(`${PANDORE_API_BASE}/admin/tenants/${encodeURIComponent(req.params.id)}/social-accounts/${encodeURIComponent(req.params.social_account_id)}/capabilities/latest-attempt`, {
+      headers: { Authorization: authorization },
+    });
+    const data = await goRes.json().catch(() => ({}));
+    res.status(goRes.status).json(data);
+  } catch (err) {
+    console.error('capabilities latest-attempt proxy:', err.message);
+    res.status(502).json({ error: 'Lecture impossible pour le moment' });
+  }
+});
+
 // --- H3-008D1K — Platform Integration Configuration (Niveau A) : relais
 // THIN GÉNÉRIQUE vers GET/PUT /admin/platform-integrations[/:platform]
 // (Go, H3-008D1G/H3-008D1I, déjà génériques et schema-driven — aucun champ
