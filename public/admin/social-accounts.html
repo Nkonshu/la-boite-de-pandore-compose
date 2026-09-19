@@ -882,17 +882,41 @@ function renderCapabilityCell(records, tenantId, socialAccountId){
   return `<span class="pill ${esc(cls)}" title="Publication texte — vérifié ${esc(fmtDate(publish.verified_at))}">${esc(label)}</span>` + button;
 }
 
-// H3-008D1Q3 — GÉNÉRIQUE : ne connaît aucune plateforme par son nom, ne
-// fait que déclencher l'orchestration existante et rafraîchir l'affichage
-// déjà générique ci-dessus (§UI du mandat : "sans branchement spécifique à
-// une plateforme"). Même patron d'appel/erreur que
+// H3-008D1Q11 §8 — la réponse distingue désormais explicitement A. l'état
+// AUTORITAIRE résultant (body.capabilities, identique à granted-capabilities)
+// de B. l'issue de CETTE tentative précise (body.attempt_outcome/
+// body.observations) — jamais fusionnés. Corrige le défaut H3-008D1Q9 :
+// l'ancien message inconditionnel "Capacités revérifiées." laissait croire
+// à une reconfirmation fraîche même quand rien n'avait pu être appliqué
+// (anti-downgrade sur une nouvelle observation UNKNOWN).
+function describeRevalidationAttempt(body){
+  const capability = (body.capabilities || []).find(c => c.capability === 'PUBLISH_TEXT');
+  const observation = (body.observations || []).find(o => o.capability === 'PUBLISH_TEXT');
+  const label = capability ? (CAPABILITY_STATE_LABEL[capability.state] || capability.state) : 'Inconnue';
+  const verifiedAt = capability ? fmtDate(capability.verified_at) : '';
+  if(body.attempt_outcome === 'APPLIED'){
+    return `Capacité mise à jour : Publication texte est désormais « ${label} » (confirmé à l'instant).`;
+  }
+  if(body.attempt_outcome === 'INCONCLUSIVE'){
+    if(observation && observation.skip_reason === 'ANTI_DOWNGRADE_UNKNOWN'){
+      return `Tentative sans résultat concluant (nouvelle observation non fiable) : l'état actuel reste « ${label} » (dernière confirmation le ${verifiedAt}).`;
+    }
+    return `Tentative sans résultat concluant : l'état actuel reste « ${label} » (dernière confirmation le ${verifiedAt}).`;
+  }
+  return 'Capacités revérifiées.';
+}
+
+// H3-008D1Q3/H3-008D1Q11 — GÉNÉRIQUE : ne connaît aucune plateforme par son
+// nom, ne fait que déclencher l'orchestration existante et rafraîchir
+// l'affichage déjà générique ci-dessus (§UI du mandat : "sans branchement
+// spécifique à une plateforme"). Même patron d'appel/erreur que
 // selectResource/apiWithPandoreSession.
 async function revalidateCapabilities(tenantId, socialAccountId){
   const msgEl = document.getElementById('actionMsg');
   try{
-    await apiWithPandoreSession(`/api/admin/tenants/${encodeURIComponent(tenantId)}/social-accounts/${encodeURIComponent(socialAccountId)}/capabilities/revalidate`, { method: 'POST' });
-    msgEl.className = 'msg ok';
-    msgEl.textContent = 'Capacités revérifiées.';
+    const body = await apiWithPandoreSession(`/api/admin/tenants/${encodeURIComponent(tenantId)}/social-accounts/${encodeURIComponent(socialAccountId)}/capabilities/revalidate`, { method: 'POST' });
+    msgEl.className = 'msg ' + (body.attempt_outcome === 'APPLIED' ? 'ok' : 'warn');
+    msgEl.textContent = describeRevalidationAttempt(body);
     refresh();
   }catch(err){
     msgEl.className = 'msg err';

@@ -114,11 +114,29 @@ function test(name, fn) {
     assert.ok(!/vérifier facebook/i.test(tbody.innerHTML), 'jamais un libellé nommant la plateforme');
   });
 
-  await test('clicking the button posts to the generic revalidate relay with the real Pandore Bearer session, then refreshes', async () => {
+// H3-008D1Q11 §7 — réponse RÉELLE du relais generic depuis ce lot : sépare
+// l'état AUTORITAIRE (capabilities) de l'issue de CETTE tentative
+// (attempt_outcome/observations) — jamais un simple tableau comme avant.
+function revalidateResponse({ attemptOutcome, capabilityState, verifiedAt, observedState, applied, skipReason }) {
+  return {
+    attempt_id: 'attempt-fixture-1',
+    attempt_outcome: attemptOutcome,
+    attempt_triggered_at: '2026-09-19T10:00:00Z',
+    attempt_finished_at: '2026-09-19T10:00:00Z',
+    capabilities: [{ capability: 'PUBLISH_TEXT', state: capabilityState, provenance: 'REAL_OBSERVATION', verified_at: verifiedAt }],
+    observations: [{ capability: 'PUBLISH_TEXT', observed_state: observedState, observed_provenance: 'REAL_OBSERVATION', applied, skip_reason: skipReason || '' }],
+    external_effects: null,
+  };
+}
+
+  await test('a fresh confirmation (attempt_outcome=APPLIED) posts to the generic relay and shows the new authoritative state as ok', async () => {
     let revalidateCalled = false;
     const sandbox = runPage({
       fetchImpl: async (url, opts) => {
-        if (url.includes('/capabilities/revalidate')) { revalidateCalled = true; return jsonOk([{ capability: 'PUBLISH_TEXT', state: 'GRANTED', provenance: 'REAL_OBSERVATION', verified_at: '2026-09-10T08:00:00Z' }]); }
+        if (url.includes('/capabilities/revalidate')) {
+          revalidateCalled = true;
+          return jsonOk(revalidateResponse({ attemptOutcome: 'APPLIED', capabilityState: 'GRANTED', verifiedAt: '2026-09-10T08:00:00Z', observedState: 'GRANTED', applied: true }));
+        }
         if (url.includes('/api/admin/social-accounts?')) return jsonOk([ACCOUNT_CONNECTED]);
         if (url.includes('/granted-capabilities')) return jsonOk([]);
         return jsonOk({});
@@ -137,6 +155,33 @@ function test(name, fn) {
 
     const msgEl = sandbox.__elements.get('actionMsg');
     assert.strictEqual(msgEl.className, 'msg ok');
+    assert.ok(msgEl.textContent.includes('Accordée') || msgEl.textContent.toLowerCase().includes('accordée'), `attendu un message reflétant l'état confirmé, obtenu: ${msgEl.textContent}`);
+  });
+
+  // H3-008D1Q11 §8 — reproduit EXACTEMENT le défaut H3-008D1Q9 côté UI :
+  // l'ancien message inconditionnel "Capacités revérifiées." laissait
+  // croire à une reconfirmation fraîche même quand l'anti-downgrade a
+  // refusé la nouvelle observation. Le message doit désormais rester
+  // honnête : état autoritaire préservé, tentative sans effet.
+  await test('an inconclusive attempt (anti-downgrade) never claims a fresh confirmation and states the preserved authoritative state', async () => {
+    const sandbox = runPage({
+      fetchImpl: async (url) => {
+        if (url.includes('/capabilities/revalidate')) {
+          return jsonOk(revalidateResponse({ attemptOutcome: 'INCONCLUSIVE', capabilityState: 'GRANTED', verifiedAt: '2026-09-10T08:00:00Z', observedState: 'UNKNOWN', applied: false, skipReason: 'ANTI_DOWNGRADE_UNKNOWN' }));
+        }
+        if (url.includes('/api/admin/social-accounts?')) return jsonOk([ACCOUNT_CONNECTED]);
+        if (url.includes('/granted-capabilities')) return jsonOk([]);
+        return jsonOk({});
+      },
+    });
+    await waitForRender();
+    await sandbox.revalidateCapabilities('t_fixture', 'sa_1');
+    await waitForRender();
+
+    const msgEl = sandbox.__elements.get('actionMsg');
+    assert.strictEqual(msgEl.className, 'msg warn');
+    assert.ok(!msgEl.textContent.includes('Capacités revérifiées.'), `ne doit jamais afficher le message inconditionnel ambigu, obtenu: ${msgEl.textContent}`);
+    assert.ok(msgEl.textContent.toLowerCase().includes('accordée'), `attendu que l'état autoritaire préservé (Accordée) soit affiché, obtenu: ${msgEl.textContent}`);
   });
 
   await test('a revalidation failure shows an explicit error message without throwing', async () => {
