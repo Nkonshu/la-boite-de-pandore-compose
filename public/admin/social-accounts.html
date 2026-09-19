@@ -98,6 +98,17 @@
   .pill.platform-facebook { background: rgba(139,144,154,0.14); color: var(--mute); }
   .pill.platform-instagram { background: rgba(232,163,61,0.14); color: var(--accent); }
 
+  /* H3-008D1Q2 §11 — état de capacité RÉELLEMENT vérifié (core.GrantedCapability),
+     visuellement DISTINCT des pills statut/plateforme ci-dessus : jamais la
+     même couleur qu'un scope simplement demandé à l'OAuth (td.scopes reste
+     neutre/discret, voir plus bas). */
+  .pill.cap-granted { background: rgba(61,189,140,0.14); color: var(--good); }
+  .pill.cap-missing { background: rgba(226,104,90,0.14); color: var(--bad); }
+  .pill.cap-degraded { background: rgba(232,163,61,0.14); color: var(--accent); }
+  .pill.cap-unsupported { background: rgba(139,144,154,0.14); color: var(--mute); }
+  .pill.cap-unknown { background: rgba(139,144,154,0.14); color: var(--mute); }
+  .pill.cap-unverified { background: transparent; color: var(--mute-dim); border: 1px dashed var(--border); }
+
   .empty-row td { text-align: center; color: var(--mute-dim); padding: 28px; }
   .msg { font-size: 13px; margin-top: 10px; }
   .msg.err { color: var(--bad); }
@@ -208,8 +219,8 @@
       </div>
       <div class="table-scroll">
         <table id="accountsTable">
-          <thead><tr><th>Plateforme</th><th>Nom</th><th>Statut</th><th>Permissions</th><th>Connecté le</th><th></th></tr></thead>
-          <tbody><tr class="empty-row"><td colspan="6">Renseignez un tenant_id ci-dessus.</td></tr></tbody>
+          <thead><tr><th>Plateforme</th><th>Nom</th><th>Statut</th><th>Scopes demandés (OAuth)</th><th>Capacité de publication</th><th>Connecté le</th><th></th></tr></thead>
+          <tbody><tr class="empty-row"><td colspan="7">Renseignez un tenant_id ci-dessus.</td></tr></tbody>
         </table>
       </div>
       <div class="msg" id="actionMsg"></div>
@@ -817,10 +828,10 @@ async function refresh(){
   const tenantId = currentTenantId();
   const tbody = document.querySelector('#accountsTable tbody');
   if(!tenantId){
-    tbody.innerHTML = '<tr class="empty-row"><td colspan="6">Renseignez un tenant_id ci-dessus.</td></tr>';
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="7">Renseignez un tenant_id ci-dessus.</td></tr>';
     return;
   }
-  tbody.innerHTML = '<tr class="empty-row"><td colspan="6">Chargement...</td></tr>';
+  tbody.innerHTML = '<tr class="empty-row"><td colspan="7">Chargement...</td></tr>';
   const url = new URL(location.href);
   url.searchParams.set('tenant_id', tenantId);
   history.replaceState(null, '', url);
@@ -828,25 +839,67 @@ async function refresh(){
     const res = await api(`/api/admin/social-accounts?tenant_id=${encodeURIComponent(tenantId)}`);
     const accounts = await res.json().catch(() => []);
     if(!res.ok) throw new Error((accounts && accounts.error && (accounts.error.message || accounts.error)) || `Erreur ${res.status}`);
-    render(Array.isArray(accounts) ? accounts : []);
+    await render(Array.isArray(accounts) ? accounts : [], tenantId);
   }catch(err){
-    tbody.innerHTML = `<tr class="empty-row"><td colspan="6">${esc(err.message)}</td></tr>`;
+    tbody.innerHTML = `<tr class="empty-row"><td colspan="7">${esc(err.message)}</td></tr>`;
   }
 }
 
-function render(accounts){
+// H3-008D1Q2 §11 — les scopes OAuth demandés (ci-dessus) ne prouvent jamais
+// qu'une capacité est RÉELLEMENT accordée (voir le diagnostic H3-008D1Q1) :
+// cette fonction va lire ce que Pandore a RÉELLEMENT vérifié
+// (core.GrantedCapability, jamais déduit de granted_scopes). Une liste VIDE
+// est un résultat NORMAL — "jamais encore vérifié" — jamais une erreur
+// affichée à l'opérateur (voir httpapi/granted_capabilities.go).
+async function fetchGrantedCapabilities(tenantId, socialAccountId){
+  try{
+    // apiWithPandoreSession renvoie déjà le corps JSON décodé (ou lève une
+    // erreur avec .status en cas de réponse non-ok) — même contrat que son
+    // usage existant pour platform-connections/renommage, jamais un second
+    // patron de désencapsulation ici.
+    return await apiWithPandoreSession(`/api/admin/tenants/${encodeURIComponent(tenantId)}/social-accounts/${encodeURIComponent(socialAccountId)}/granted-capabilities`);
+  }catch(err){
+    return null; // session absente/expirée ou droits insuffisants : affiché comme non vérifiable, jamais fabriqué
+  }
+}
+
+const CAPABILITY_STATE_LABEL = {
+  GRANTED: 'Accordée', MISSING: 'Absente', DEGRADED: 'Dégradée',
+  UNSUPPORTED: 'Non supportée', UNKNOWN: 'Inconnue',
+};
+
+function renderCapabilityCell(records){
+  if(records === null){
+    return '<span class="pill cap-unverified">Non vérifiable</span>';
+  }
+  const publish = records.find(r => r.capability === 'PUBLISH_TEXT');
+  if(!publish){
+    return '<span class="pill cap-unverified">Jamais vérifiée</span>';
+  }
+  const cls = 'cap-' + publish.state.toLowerCase();
+  const label = CAPABILITY_STATE_LABEL[publish.state] || publish.state;
+  return `<span class="pill ${esc(cls)}" title="Publication texte — vérifié ${esc(fmtDate(publish.verified_at))}">${esc(label)}</span>`;
+}
+
+async function render(accounts, tenantId){
   const tbody = document.querySelector('#accountsTable tbody');
   if(accounts.length === 0){
-    tbody.innerHTML = '<tr class="empty-row"><td colspan="6">Aucun compte connecté pour ce tenant.</td></tr>';
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="7">Aucun compte connecté pour ce tenant.</td></tr>';
     return;
   }
   const sorted = [...accounts].sort((a,b) => new Date(b.connected_at) - new Date(a.connected_at));
-  tbody.innerHTML = sorted.map(a => `
+  // Résolution en parallèle, une lecture par compte — jamais bloquant pour
+  // l'affichage des colonnes déjà connues (statut/scopes demandés).
+  const capabilitiesByAccount = await Promise.all(
+    sorted.map(a => a.status === 'CONNECTED' ? fetchGrantedCapabilities(tenantId, a.id) : Promise.resolve(null))
+  );
+  tbody.innerHTML = sorted.map((a, i) => `
     <tr>
       <td><span class="pill platform-${esc(a.platform)}">${esc(a.platform)}</span></td>
       <td>${esc(a.display_name || a.external_account_id)}</td>
       <td><span class="pill ${a.status === 'CONNECTED' ? 'connected' : 'revoked'}">${a.status === 'CONNECTED' ? 'connecté' : 'révoqué'}</span></td>
       <td class="scopes">${(a.granted_scopes || []).map(esc).join(', ') || '—'}</td>
+      <td>${a.status === 'CONNECTED' ? renderCapabilityCell(capabilitiesByAccount[i]) : '—'}</td>
       <td class="date">${fmtDate(a.connected_at)}</td>
       <td>${a.status === 'CONNECTED'
         ? `<button class="btn btn-danger btn-sm" onclick="revoke('${esc(a.id)}')">Révoquer</button>`

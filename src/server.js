@@ -808,6 +808,32 @@ app.post('/api/admin/tenants/:id/platform-connections/:platform/:session/select'
   }
 });
 
+// GET /api/admin/tenants/:id/social-accounts/:social_account_id/granted-capabilities
+// — H3-008D1Q2 §11 : lecture des capacités RÉELLEMENT vérifiées (jamais les
+// scopes simplement demandés à l'OAuth, voir toAdminSocialAccountView plus
+// bas). Même identité Bearer Pandore que platform-connections ci-dessus
+// (requireSession côté Go, PAS x-internal-secret) — contrairement à
+// /api/admin/social-accounts (liste/révocation) qui reste sur l'ancien
+// patron x-internal-secret hérité de H3-008D1J : cette route-ci est
+// scopée tenant et lit une ressource plus récente, alignée sur le patron
+// de session moderne des autres routes /admin/tenants/:id/... ci-dessus,
+// jamais un choix d'incohérence.
+app.get('/api/admin/tenants/:id/social-accounts/:social_account_id/granted-capabilities', async (req, res) => {
+  if (!checkAdmin(req, res)) return;
+  const authorization = requirePandoreBearer(req, res);
+  if (!authorization) return;
+  try {
+    const goRes = await fetch(`${PANDORE_API_BASE}/admin/tenants/${encodeURIComponent(req.params.id)}/social-accounts/${encodeURIComponent(req.params.social_account_id)}/granted-capabilities`, {
+      headers: { Authorization: authorization },
+    });
+    const data = await goRes.json().catch(() => ({}));
+    res.status(goRes.status).json(data);
+  } catch (err) {
+    console.error('granted-capabilities proxy:', err.message);
+    res.status(502).json({ error: 'Lecture impossible pour le moment' });
+  }
+});
+
 // --- H3-008D1K — Platform Integration Configuration (Niveau A) : relais
 // THIN GÉNÉRIQUE vers GET/PUT /admin/platform-integrations[/:platform]
 // (Go, H3-008D1G/H3-008D1I, déjà génériques et schema-driven — aucun champ
