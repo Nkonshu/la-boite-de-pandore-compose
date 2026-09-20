@@ -168,6 +168,64 @@ function test(name, fn) {
     assert.ok(!tbody.innerHTML.includes('Capacités revérifiées.'), 'jamais le message ambigu inconditionnel pour une tentative inconclusive');
   });
 
+  await test('H3-008D1Q18 — an inconclusive attempt with a failed external effect shows a concise, generic, operator-safe failure category — never a raw provider code/message', async () => {
+    const sandbox = runPage({
+      fetchImpl: async (url) => {
+        if (url.includes('/api/admin/social-accounts?')) return jsonOk([ACCOUNT_CONNECTED]);
+        if (url.includes('/granted-capabilities')) {
+          return jsonOk([{ capability: 'PUBLISH_TEXT', state: 'GRANTED', provenance: 'REAL_OBSERVATION', verified_at: '2026-09-19T19:24:21Z' }]);
+        }
+        if (url.includes('/capabilities/latest-attempt')) {
+          return jsonOk({
+            exists: true, attempt_id: 'attempt-failuredetail-1', platform: 'facebook',
+            triggered_at: '2026-09-19T21:37:16Z', finished_at: '2026-09-19T21:37:16Z', outcome: 'INCONCLUSIVE',
+            observations: [{ capability: 'PUBLISH_TEXT', observed_state: 'UNKNOWN', observed_provenance: 'REAL_OBSERVATION', applied: false, skip_reason: 'ANTI_DOWNGRADE_UNKNOWN' }],
+            external_effects: [
+              { sequence: 0, provider: 'facebook', operation_class: 'TOKEN_INTROSPECTION', succeeded: true, duration_ms: 100 },
+              {
+                sequence: 1, provider: 'facebook', operation_class: 'RESOURCE_RIGHTS_CHECK', succeeded: false, duration_ms: 166,
+                failure_class: 'AUTHENTICATION', http_status: 401, provider_error_code: 190, provider_error_subcode: 463, provider_error_type: 'OAuthException',
+              },
+            ],
+          });
+        }
+        return jsonOk({});
+      },
+    });
+    await waitForRender();
+    const tbody = sandbox.__elements.get('#accountsTable tbody');
+    assert.ok(tbody.innerHTML.includes('non concluante'), 'attendu la ligne non concluante habituelle, inchangée');
+    assert.ok(tbody.innerHTML.includes('authentification refusée'), 'attendu le libellé opérateur générique pour AUTHENTICATION');
+    assert.ok(!tbody.innerHTML.includes('401'), 'jamais le statut HTTP brut affiché à l\'opérateur');
+    assert.ok(!tbody.innerHTML.includes('190'), 'jamais le code provider brut affiché à l\'opérateur');
+    assert.ok(!tbody.innerHTML.includes('OAuthException'), 'jamais le type provider brut affiché à l\'opérateur');
+    assert.ok(!tbody.innerHTML.includes('facebook'.toUpperCase()) , 'jamais un nom de plateforme dans cette note générique');
+  });
+
+  await test('H3-008D1Q18 — a successful attempt never shows a failure note, and null external_effects (telemetry unavailable) never fabricates one either', async () => {
+    const sandbox = runPage({
+      fetchImpl: async (url) => {
+        if (url.includes('/api/admin/social-accounts?')) return jsonOk([ACCOUNT_CONNECTED]);
+        if (url.includes('/granted-capabilities')) {
+          return jsonOk([{ capability: 'PUBLISH_TEXT', state: 'GRANTED', provenance: 'REAL_OBSERVATION', verified_at: '2026-09-19T21:37:16Z' }]);
+        }
+        if (url.includes('/capabilities/latest-attempt')) {
+          return jsonOk({
+            exists: true, attempt_id: 'attempt-applied-nofailure', platform: 'facebook',
+            triggered_at: '2026-09-19T21:37:16Z', finished_at: '2026-09-19T21:37:16Z', outcome: 'APPLIED',
+            observations: [{ capability: 'PUBLISH_TEXT', observed_state: 'GRANTED', observed_provenance: 'REAL_OBSERVATION', applied: true, skip_reason: '' }],
+            external_effects: null,
+          });
+        }
+        return jsonOk({});
+      },
+    });
+    await waitForRender();
+    const tbody = sandbox.__elements.get('#accountsTable tbody');
+    assert.ok(tbody.innerHTML.includes('concluante'), 'attendu la ligne concluante habituelle');
+    assert.ok(!tbody.innerHTML.includes('appel externe en échec'), 'jamais de note d\'échec fabriquée en l\'absence d\'effet en échec');
+  });
+
   await test('a historical attempt without Q11 telemetry (Q5/Q9-shaped) is described honestly as detail-unavailable, never as a confirmation or a failure', async () => {
     const sandbox = runPage({
       fetchImpl: async (url) => {

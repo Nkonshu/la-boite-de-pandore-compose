@@ -884,6 +884,34 @@ async function fetchLatestAttempt(tenantId, socialAccountId){
   }
 }
 
+// FAILURE_CLASS_OPERATOR_LABEL — H3-008D1Q18 §6/Acceptance principle :
+// libellé COURT et GÉNÉRIQUE (jamais un nom de plateforme, jamais un
+// message provider brut, jamais un code numérique) — juste assez pour
+// qu'un opérateur distingue "panne réseau passagère" de "authentification
+// refusée" sans ouvrir une console de diagnostic. Vocabulaire fermé,
+// identique par VALEUR à platformadapter.ProviderFailureClass/
+// core.CapabilityEffectFailureClass — jamais une quatrième copie du
+// vocabulaire inventée ici.
+const FAILURE_CLASS_OPERATOR_LABEL = {
+  NETWORK: 'panne réseau', TIMEOUT: 'délai dépassé', AUTHENTICATION: 'authentification refusée',
+  RATE_LIMIT: 'limite de débit atteinte', HTTP_ERROR: 'erreur du fournisseur', PROVIDER_ERROR: 'panne côté fournisseur',
+  MALFORMED_RESPONSE: 'réponse inattendue', UNKNOWN: 'cause inconnue',
+};
+
+// describeExternalEffectFailureNote — H3-008D1Q18 : répond à l'audit
+// H3-008D1Q17 (trigger#4 : une tentative INCONCLUSIVE dont la cause réelle
+// était jusqu'ici invisible en UI). N'affiche RIEN pour un effet réussi ni
+// en l'absence de télémétrie d'effets (external_effects null — jamais
+// interprété comme "aucun échec"). Ne montre QUE la catégorie générique du
+// PREMIER effet en échec — jamais son statut HTTP/code/subcode brut (§6 du
+// mandat : "at most a concise operator-safe failure indication").
+function describeExternalEffectFailureNote(effects){
+  const failed = (effects || []).find(e => !e.succeeded);
+  if(!failed) return '';
+  const label = FAILURE_CLASS_OPERATOR_LABEL[failed.failure_class] || 'cause inconnue';
+  return ` — appel externe en échec (${esc(label)})`;
+}
+
 // describeLatestAttemptLine — rend l'issue de la DERNIÈRE tentative
 // SÉPARÉMENT de l'état autoritaire (le pill ci-dessus) : jamais fusionnés
 // (§1/§6 du mandat H3-008D1Q15). Une ligne historique H3-008D1Q5/Q9
@@ -899,7 +927,7 @@ function describeLatestAttemptLine(attempt){
   if(observation.applied){
     return `<div class="attempt-note">Dernière revérification : concluante (${when})</div>`;
   }
-  return `<div class="attempt-note">Dernière revérification : non concluante — état précédent conservé (${when})</div>`;
+  return `<div class="attempt-note">Dernière revérification : non concluante — état précédent conservé (${when})${describeExternalEffectFailureNote(attempt.external_effects)}</div>`;
 }
 
 function renderCapabilityCell(records, latestAttempt, tenantId, socialAccountId){

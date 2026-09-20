@@ -63,6 +63,26 @@ global.fetch = async (url, opts = {}) => {
   if (u.pathname === '/admin/tenants/t_fixture/social-accounts/sa_missing/capabilities/latest-attempt') {
     return jsonResponse(404, { error: { code: 'NOT_FOUND', message: 'compte social introuvable' } });
   }
+  // H3-008D1Q18 — fixture pour le détail sûr d'échec d'effet externe
+  // (failure_class/http_status/provider_error_code/provider_error_subcode/
+  // provider_error_type), générique — jamais un nom de plateforme réel
+  // dans ce fichier (voir la discipline déjà établie ci-dessus).
+  if (u.pathname === '/admin/tenants/t_fixture/social-accounts/sa_failuredetail/capabilities/latest-attempt') {
+    return jsonResponse(200, {
+      exists: true, attempt_id: 'attempt-fixture-2', platform: 'synthetic',
+      triggered_at: '2026-09-20T00:00:00Z', finished_at: '2026-09-20T00:00:01Z', outcome: 'INCONCLUSIVE',
+      observations: [],
+      external_effects: [
+        {
+          sequence: 0, provider: 'synthetic', operation_class: 'TOKEN_INTROSPECTION', succeeded: false, duration_ms: 5,
+          failure_class: 'AUTHENTICATION', http_status: 401, provider_error_code: 190, provider_error_subcode: 463, provider_error_type: 'OAuthException',
+        },
+        {
+          sequence: 1, provider: 'synthetic', operation_class: 'RESOURCE_RIGHTS_CHECK', succeeded: true, duration_ms: 3,
+        },
+      ],
+    });
+  }
   if (u.pathname === '/admin/tenants/tenant-xyz/social-accounts/account-abc/capabilities/latest-attempt') {
     return jsonResponse(200, { exists: false });
   }
@@ -143,6 +163,24 @@ async function main() {
       assert.strictEqual(res.status, 404, 'le 404 de Pandore doit être relayé tel quel, jamais transformé en 200/500');
       const body = await res.json();
       assert.strictEqual(body.error.code, 'NOT_FOUND');
+    });
+
+    await test('6. H3-008D1Q18 failure-detail fields survive the relay unchanged, both for a failed and a successful effect', async () => {
+      const res = await fetch(`${base}/api/admin/tenants/t_fixture/social-accounts/sa_failuredetail/capabilities/latest-attempt`, { headers: bearerHeaders });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.external_effects.length, 2);
+      const failed = body.external_effects[0];
+      assert.strictEqual(failed.succeeded, false);
+      assert.strictEqual(failed.failure_class, 'AUTHENTICATION');
+      assert.strictEqual(failed.http_status, 401);
+      assert.strictEqual(failed.provider_error_code, 190);
+      assert.strictEqual(failed.provider_error_subcode, 463);
+      assert.strictEqual(failed.provider_error_type, 'OAuthException');
+      const succeeded = body.external_effects[1];
+      assert.strictEqual(succeeded.succeeded, true);
+      assert.strictEqual(succeeded.failure_class, undefined, 'aucun détail d\'échec fabriqué pour un effet réussi (omitempty côté Go)');
+      assert.strictEqual(succeeded.http_status, undefined);
     });
 
     await test('7. this relay never reaches the revalidation route — structurally a GET-only handler, no fallback to POST', async () => {
