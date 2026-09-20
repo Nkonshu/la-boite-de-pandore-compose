@@ -906,6 +906,62 @@ app.get('/api/admin/tenants/:id/social-accounts/:social_account_id/authorization
   }
 });
 
+// --- H3-008D1Q36K — Domain Applicability Review : relais THIN GÉNÉRIQUE
+// vers GET /admin/domain-profiles (catalogue statique en lecture seule) et
+// GET/POST /admin/tenants/:id/domain-profile-selections (contrat évolué
+// H3-008D1Q36J : revue explicite + ensemble de profils, jamais un
+// sentinelle "none"/"generic"). Même identité Bearer Pandore que les
+// relais ci-dessus, jamais x-internal-secret, jamais un second contrat —
+// reviewed_by/selected_by sont toujours dérivés côté Go de ce Bearer,
+// jamais du corps de la requête ici.
+app.get('/api/admin/domain-profiles', async (req, res) => {
+  if (!checkAdmin(req, res)) return;
+  const authorization = requirePandoreBearer(req, res);
+  if (!authorization) return;
+  try {
+    const goRes = await fetch(`${PANDORE_API_BASE}/admin/domain-profiles`, { headers: { Authorization: authorization } });
+    const data = await goRes.json().catch(() => ({}));
+    res.status(goRes.status).json(data);
+  } catch (err) {
+    console.error('domain-profiles proxy:', err.message);
+    res.status(502).json({ error: 'Lecture impossible pour le moment' });
+  }
+});
+
+app.get('/api/admin/tenants/:id/domain-profile-selections', async (req, res) => {
+  if (!checkAdmin(req, res)) return;
+  const authorization = requirePandoreBearer(req, res);
+  if (!authorization) return;
+  try {
+    const goRes = await fetch(`${PANDORE_API_BASE}/admin/tenants/${encodeURIComponent(req.params.id)}/domain-profile-selections`, {
+      headers: { Authorization: authorization },
+    });
+    const data = await goRes.json().catch(() => ({}));
+    res.status(goRes.status).json(data);
+  } catch (err) {
+    console.error('domain-profile-selections GET proxy:', err.message);
+    res.status(502).json({ error: 'Lecture impossible pour le moment' });
+  }
+});
+
+app.post('/api/admin/tenants/:id/domain-profile-selections', async (req, res) => {
+  if (!checkAdmin(req, res)) return;
+  const authorization = requirePandoreBearer(req, res);
+  if (!authorization) return;
+  try {
+    const goRes = await fetch(`${PANDORE_API_BASE}/admin/tenants/${encodeURIComponent(req.params.id)}/domain-profile-selections`, {
+      method: 'POST',
+      headers: { Authorization: authorization, 'Content-Type': 'application/json' },
+      body: JSON.stringify(req.body || {}),
+    });
+    const data = await goRes.json().catch(() => ({}));
+    res.status(goRes.status).json(data);
+  } catch (err) {
+    console.error('domain-profile-selections POST proxy:', err.message);
+    res.status(502).json({ error: 'Enregistrement impossible pour le moment' });
+  }
+});
+
 // --- H3-008D1K — Platform Integration Configuration (Niveau A) : relais
 // THIN GÉNÉRIQUE vers GET/PUT /admin/platform-integrations[/:platform]
 // (Go, H3-008D1G/H3-008D1I, déjà génériques et schema-driven — aucun champ

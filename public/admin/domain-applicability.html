@@ -1,0 +1,622 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Applicabilité métier — La Boîte de Pandore</title>
+<meta name="robots" content="noindex">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg?v=2">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0B0D10;
+    --surface: #14171C;
+    --surface-raised: #1C2027;
+    --accent: #E8A33D;
+    --good: #3DBD8C;
+    --bad: #E2685A;
+    --text: #F3F1EC;
+    --mute: #8B909A;
+    --mute-dim: #5B616B;
+    --border: #262B33;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'IBM Plex Sans', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1, h2, h3 { font-family: 'Instrument Sans', 'IBM Plex Sans', sans-serif; margin: 0; }
+  a { color: var(--accent); }
+
+  .gate { min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+  .gate-box { width: 100%; max-width: 360px; padding: 24px; }
+  .gate-box h1 { font-size: 22px; margin-bottom: 20px; }
+  .gate-box input {
+    width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 13px 14px; color: var(--text); font-family: inherit; font-size: 15px; margin-bottom: 14px;
+  }
+  .gate-box input:focus { outline: none; border-color: var(--accent); }
+  .gate-box .err { color: var(--bad); font-size: 13px; margin-bottom: 12px; display: none; }
+  .gate-box .err.show { display: block; }
+
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    background: var(--accent); color: #201404; font-weight: 700; font-size: 14px;
+    padding: 11px 22px; border-radius: 999px; border: none; cursor: pointer;
+  }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn:focus-visible, input:focus-visible, a:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 2px;
+  }
+  .btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--text); font-weight: 600; }
+  .btn-sm { padding: 6px 14px; font-size: 12.5px; }
+
+  #dashboard { display: none; }
+  #dashboard.show { display: block; }
+  .wrap { max-width: 780px; margin: 0 auto; padding: 40px 24px 90px; }
+  @media (max-width: 520px) {
+    .wrap { padding: 20px 14px 70px; }
+  }
+  .topbar { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 12px; }
+  .topbar h1 { font-size: 24px; font-weight: 700; }
+
+  .panel { margin-bottom: 28px; }
+  .panel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .panel h2 {
+    font-family: 'IBM Plex Mono', monospace; font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--accent);
+  }
+  .panel p.help { font-size: 13px; color: var(--mute); margin: 0 0 12px; }
+
+  .state-banner {
+    padding: 14px 16px; border-radius: 12px; border: 1px solid var(--border); background: var(--surface);
+    font-size: 14px; display: flex; flex-direction: column; gap: 4px;
+  }
+  .state-banner.not-reviewed { border-color: var(--bad); }
+  .state-banner.reviewed-none { border-color: var(--good); }
+  .state-banner.reviewed-with { border-color: var(--good); }
+  .state-banner .state-title { font-weight: 700; }
+  .state-banner.not-reviewed .state-title { color: var(--bad); }
+  .state-banner.reviewed-none .state-title,
+  .state-banner.reviewed-with .state-title { color: var(--good); }
+  .state-banner .state-meta { font-size: 12px; color: var(--mute-dim); font-family: 'IBM Plex Mono', monospace; }
+
+  .profile-list { display: flex; flex-direction: column; gap: 10px; }
+  .profile-row {
+    display: flex; align-items: flex-start; gap: 12px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px;
+  }
+  .profile-row input[type="checkbox"] { margin-top: 3px; width: 18px; height: 18px; flex-shrink: 0; accent-color: var(--accent); }
+  .profile-row.disabled { opacity: 0.45; }
+  .profile-row label { display: block; cursor: pointer; }
+  .profile-row .name { font-size: 14.5px; font-weight: 600; }
+  .profile-row .id { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--mute-dim); margin-left: 8px; }
+  .profile-row .desc { font-size: 13px; color: var(--mute); margin-top: 4px; }
+  .profile-row .parent { font-size: 11.5px; color: var(--mute-dim); margin-top: 4px; }
+
+  .none-row {
+    display: flex; align-items: flex-start; gap: 12px;
+    background: var(--surface-raised); border: 1px dashed var(--border); border-radius: 12px; padding: 14px 16px;
+    margin-bottom: 14px;
+  }
+  .none-row input[type="checkbox"] { margin-top: 3px; width: 18px; height: 18px; flex-shrink: 0; accent-color: var(--accent); }
+  .none-row label { cursor: pointer; font-size: 14px; font-weight: 600; }
+  .none-row .desc { font-size: 12.5px; color: var(--mute); margin-top: 4px; }
+
+  .confirm-box {
+    margin-top: 18px; padding: 14px 16px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; display: flex; flex-direction: column; gap: 10px;
+  }
+  .confirm-box .confirm-row { display: flex; align-items: flex-start; gap: 10px; }
+  .confirm-box input[type="checkbox"] { margin-top: 3px; width: 18px; height: 18px; flex-shrink: 0; accent-color: var(--accent); }
+  .confirm-box label { font-size: 13px; cursor: pointer; }
+  .confirm-box .consequence { font-size: 12.5px; color: var(--mute); }
+
+  .msg { font-size: 13px; margin-top: 10px; }
+  .msg.err { color: var(--bad); }
+  .msg.ok { color: var(--good); }
+  .empty { font-size: 13px; color: var(--mute-dim); padding: 16px; text-align: center; }
+</style>
+</head>
+<body>
+
+<div class="gate" id="gate">
+  <div class="gate-box">
+    <h1>Administration — La Boîte de Pandore</h1>
+    <input type="password" id="pwInput" placeholder="Mot de passe" autocomplete="current-password">
+    <div class="err" id="gateErr">Mot de passe incorrect.</div>
+    <button class="btn" id="loginBtn" style="width:100%">Se connecter</button>
+  </div>
+</div>
+
+<div id="dashboard">
+  <div class="wrap">
+    <div id="pandoreSessionBar" style="margin-bottom:24px;padding:10px 14px;background:var(--surface);border:1px solid var(--border);border-radius:10px;font-size:13px;"></div>
+
+    <div id="adminNav"></div>
+
+    <div class="topbar">
+      <div>
+        <h1 id="clientNameHeading">Applicabilité métier</h1>
+      </div>
+      <button class="btn btn-ghost btn-sm" id="refreshBtn">Rafraîchir</button>
+    </div>
+
+    <!-- H3-008D1Q36K — état actuel, dérivé EXPLICITEMENT du champ `reviewed`
+         renvoyé par le backend (jamais de selections.length) : trois
+         libellés visuellement et textuellement distincts. -->
+    <div class="panel">
+      <div class="panel-head"><h2>État de la revue</h2></div>
+      <div class="state-banner" id="stateBanner">Chargement…</div>
+    </div>
+
+    <!-- H3-008D1Q36K — catalogue rendu entièrement depuis les données du
+         backend (GET /admin/domain-profiles) : aucun nom de domaine/profil
+         codé en dur ici, aucune branche par identifiant. Un futur profil
+         supplémentaire s'affiche automatiquement. -->
+    <div class="panel" id="catalogPanel" style="display:none;">
+      <div class="panel-head"><h2>Profils métier applicables</h2></div>
+      <p class="help">Choisissez zéro, un ou plusieurs profils du catalogue qui s'appliquent réellement à ce client. Cette décision détermine quelles connaissances métier Pandore considère comme pertinentes pour générer du contenu.</p>
+
+      <div class="none-row">
+        <input type="checkbox" id="noneApplicableCheckbox">
+        <div>
+          <label for="noneApplicableCheckbox">Aucun profil métier spécifique ne s'applique à ce client</label>
+          <div class="desc">Choix explicite et légitime : Pandore considérera qu'aucune connaissance de domaine additionnelle n'est requise, sans jamais l'inventer.</div>
+        </div>
+      </div>
+
+      <div class="profile-list" id="profileList"></div>
+
+      <div class="confirm-box">
+        <div class="confirm-row">
+          <input type="checkbox" id="confirmCheckbox">
+          <label for="confirmCheckbox" id="confirmLabel">Je confirme avoir revu l'applicabilité métier pour ce client. Cette revue détermine quelles exigences de connaissance de domaine Pandore considère comme applicables à ce client.</label>
+        </div>
+        <div class="consequence" id="consequenceText"></div>
+        <button class="btn" id="saveBtn" disabled>Enregistrer la revue</button>
+        <div class="msg" id="saveMsg"></div>
+      </div>
+    </div>
+
+    <div class="empty" id="noTenantMsg" style="display:none;">Cette page nécessite un tenant_id (accédez-y depuis la fiche d'un client approuvé).</div>
+  </div>
+</div>
+
+<script src="/admin/nav.js"></script>
+<script>
+const PW_KEY = 'pandore_admin_pw';
+// F0.2 — même pont d'identité que social-accounts.html/audit-review.html
+// (repo compose) : ADMIN_PASSWORD reste la porte d'accès à cette page,
+// PANDORE_SESSION_KEY est l'identité Pandore réelle (User/Session/Role),
+// seule source d'autorisation pour lire/enregistrer une revue
+// d'applicabilité. sessionStorage (pas localStorage) : ce Bearer ne
+// survit pas à la fermeture de l'onglet.
+const PANDORE_SESSION_KEY = 'pandore_session';
+
+// PROFILE_KIND_PREFIXES — H3-008D1Q36K : dérivation GÉNÉRIQUE du
+// ProfileKind (DOMAIN/SUBDOMAIN/FACET) depuis la convention de nommage
+// DÉJÀ ÉTABLIE et STABLE du catalogue (internal/core/domain_profile_catalog.go :
+// "domain:", "subdomain:", "facet:" — jamais un nom de profil précis).
+// core.ProfileKind reste une étiquette D'APPEL (jamais un champ du
+// catalogue lui-même, voir domain_profile_engine.go) : le backend
+// n'expose donc aucun `kind` par profil dans GET /admin/domain-profiles —
+// cette dérivation par préfixe est la seule façon générique d'en proposer
+// un par défaut ici, sans jamais brancher sur un profile_id particulier.
+const PROFILE_KIND_PREFIXES = { domain: 'DOMAIN', subdomain: 'SUBDOMAIN', facet: 'FACET' };
+function deriveProfileKind(profileId) {
+  const prefix = String(profileId || '').split(':')[0];
+  return PROFILE_KIND_PREFIXES[prefix] || 'DOMAIN';
+}
+
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function fmtDate(iso) {
+  if (!iso) return '';
+  return new Date(iso).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' });
+}
+
+function getPandoreSession() {
+  try { return JSON.parse(sessionStorage.getItem(PANDORE_SESSION_KEY) || 'null'); }
+  catch { return null; }
+}
+function setPandoreSession(session) {
+  sessionStorage.setItem(PANDORE_SESSION_KEY, JSON.stringify(session));
+}
+function clearPandoreSession() {
+  sessionStorage.removeItem(PANDORE_SESSION_KEY);
+}
+
+function renderSessionBar() {
+  const bar = document.getElementById('pandoreSessionBar');
+  if (!bar) return;
+  const session = getPandoreSession();
+  if (session && session.token) {
+    bar.innerHTML = `
+      Connecté en tant que : <b>${esc(session.user.email)}</b> (${esc(session.user.role)})
+      <button class="btn btn-ghost btn-sm" id="pandoreLogoutBtn" style="margin-left:10px;">Déconnexion</button>
+    `;
+    document.getElementById('pandoreLogoutBtn').addEventListener('click', pandoreLogout);
+    loadAll();
+  } else {
+    bar.innerHTML = `
+      <div style="margin-bottom:6px;color:var(--mute,#8B909A);">Session Pandore requise pour lire/enregistrer une revue d'applicabilité (identité distincte du mot de passe d'accès à cette page).</div>
+      <input type="email" id="pandoreEmail" placeholder="email Pandore" style="margin-right:6px;">
+      <input type="password" id="pandorePassword" placeholder="mot de passe" style="margin-right:6px;">
+      <button class="btn btn-sm" id="pandoreLoginBtn">Connexion Pandore</button>
+      <div class="err show" id="pandoreLoginErr" style="display:none;margin-top:6px;"></div>
+    `;
+    document.getElementById('pandoreLoginBtn').addEventListener('click', pandoreLogin);
+  }
+}
+
+async function pandoreLogin() {
+  const email = document.getElementById('pandoreEmail').value.trim();
+  const password = document.getElementById('pandorePassword').value;
+  const errEl = document.getElementById('pandoreLoginErr');
+  errEl.style.display = 'none';
+  try {
+    const res = await api('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      errEl.textContent = (data.error && data.error.message) || 'Connexion Pandore refusée.';
+      errEl.style.display = 'block';
+      return;
+    }
+    setPandoreSession({ token: data.token, user: data.user });
+    renderSessionBar();
+  } catch (err) {
+    errEl.textContent = 'Connexion Pandore impossible.';
+    errEl.style.display = 'block';
+  }
+}
+
+async function pandoreLogout() {
+  const session = getPandoreSession();
+  clearPandoreSession();
+  renderSessionBar();
+  if (session && session.token) {
+    try { await api('/api/auth/logout', { method: 'POST', headers: { Authorization: `Bearer ${session.token}` } }); }
+    catch { /* déconnexion locale déjà faite, un échec réseau ici n'est pas bloquant */ }
+  }
+}
+
+// api — même patron que partout ailleurs dans ce dépôt : x-admin-password
+// systématique, 401 renvoie à la porte legacy.
+async function api(path, opts = {}) {
+  const pw = localStorage.getItem(PW_KEY) || '';
+  const res = await fetch(path, {
+    ...opts,
+    headers: { ...(opts.headers || {}), 'x-admin-password': pw },
+  });
+  if (res.status === 401) {
+    localStorage.removeItem(PW_KEY);
+    showGate(true);
+    throw new Error('unauthorized');
+  }
+  return res;
+}
+
+// apiWithPandoreSession — pour les routes /domain-profiles et
+// /domain-profile-selections, qui exigent EN PLUS un Bearer Pandore réel
+// (jamais un compte de service compose, voir F0.2). Un 401 ici signifie
+// "session Pandore expirée" — jamais "mot de passe admin incorrect" —
+// donc efface UNIQUEMENT PANDORE_SESSION_KEY, jamais PW_KEY.
+async function apiWithPandoreSession(path, opts = {}) {
+  const session = getPandoreSession();
+  if (!session || !session.token) {
+    throw new Error('Session Pandore requise.');
+  }
+  const pw = localStorage.getItem(PW_KEY) || '';
+  const res = await fetch(path, {
+    ...opts,
+    headers: { ...(opts.headers || {}), 'x-admin-password': pw, Authorization: `Bearer ${session.token}` },
+  });
+  if (res.status === 401) {
+    clearPandoreSession();
+    renderSessionBar();
+    throw new Error('Session Pandore expirée — reconnectez-vous.');
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const message = (data && data.error && (data.error.message || data.error)) || `Erreur ${res.status}`;
+    const err = new Error(message);
+    err.status = res.status;
+    throw err;
+  }
+  return data;
+}
+
+function showGate(withError) {
+  document.getElementById('gate').style.display = 'flex';
+  document.getElementById('dashboard').classList.remove('show');
+  document.getElementById('gateErr').classList.toggle('show', !!withError);
+}
+
+var currentTenantId = null;
+var currentBusinessName = null;
+
+function showDashboard() {
+  document.getElementById('gate').style.display = 'none';
+  document.getElementById('dashboard').classList.add('show');
+  const params = new URLSearchParams(location.search);
+  currentTenantId = params.get('tenant_id');
+  currentBusinessName = params.get('client_name');
+
+  if (!currentTenantId) {
+    document.getElementById('catalogPanel').style.display = 'none';
+    document.getElementById('noTenantMsg').style.display = 'block';
+    document.getElementById('stateBanner').textContent = '—';
+    updateAdminNav(null);
+    renderSessionBar();
+    return;
+  }
+  document.getElementById('noTenantMsg').style.display = 'none';
+  setClientNameHeading(currentBusinessName || currentTenantId);
+  updateAdminNav(currentBusinessName || currentTenantId);
+  renderSessionBar();
+}
+
+function setClientNameHeading(text) {
+  document.getElementById('clientNameHeading').textContent = text;
+}
+
+// updateAdminNav — H3-008D1N1 : fil d'Ariane "Clients & Prospects > <nom
+// métier> > Applicabilité métier" (voir nav.js), même patron que
+// social-accounts.html.
+function updateAdminNav(businessName) {
+  const crumbs = businessName ? [{ label: businessName }, { label: 'Applicabilité métier' }] : [{ label: 'Applicabilité métier' }];
+  AdminNav.render(document.getElementById('adminNav'), { zone: 'clients', crumbs });
+}
+
+// --- État chargé (catalogue + revue courante) ---
+var catalog = [];          // [{profile_id, name, description, parent_id, requirement_keys}]
+var currentReview = null;  // {reviewed, reviewed_at, reviewed_by, selections: [...]}
+
+async function loadAll() {
+  if (!currentTenantId) return;
+  document.getElementById('catalogPanel').style.display = 'block';
+  document.getElementById('stateBanner').textContent = 'Chargement…';
+  try {
+    const [catalogData, reviewData] = await Promise.all([
+      apiWithPandoreSession('/api/admin/domain-profiles'),
+      apiWithPandoreSession(`/api/admin/tenants/${encodeURIComponent(currentTenantId)}/domain-profile-selections`),
+    ]);
+    catalog = Array.isArray(catalogData) ? catalogData : [];
+    currentReview = reviewData;
+    renderState();
+    renderCatalog();
+    resetConfirmation();
+  } catch (err) {
+    document.getElementById('stateBanner').textContent = '';
+    document.getElementById('stateBanner').className = 'state-banner not-reviewed';
+    document.getElementById('saveMsg').className = 'msg err';
+    document.getElementById('saveMsg').textContent = err.message || 'Lecture impossible.';
+  }
+}
+
+// renderState — H3-008D1Q36K §4 : les TROIS libellés dérivent
+// EXPLICITEMENT de currentReview.reviewed (jamais de
+// currentReview.selections.length seul), pour rester exactement
+// distinguables même quand reviewed=true et selections=[].
+function renderState() {
+  const banner = document.getElementById('stateBanner');
+  if (!currentReview || !currentReview.reviewed) {
+    banner.className = 'state-banner not-reviewed';
+    banner.innerHTML = `<span class="state-title">Applicabilité métier non revue</span><span>Aucune décision opérateur n'a encore été enregistrée pour ce client.</span>`;
+    return;
+  }
+  const selections = currentReview.selections || [];
+  const metaLine = `<span class="state-meta">Revue le ${esc(fmtDate(currentReview.reviewed_at))}${currentReview.reviewed_by ? ' par ' + esc(currentReview.reviewed_by) : ''}</span>`;
+  if (selections.length === 0) {
+    banner.className = 'state-banner reviewed-none';
+    banner.innerHTML = `<span class="state-title">Revue effectuée — aucun profil métier spécifique applicable</span>${metaLine}`;
+  } else {
+    const names = selections.map(s => esc(s.profile_id)).join(', ');
+    banner.className = 'state-banner reviewed-with';
+    banner.innerHTML = `<span class="state-title">Revue effectuée — profils métier appliqués</span><span>${names}</span>${metaLine}`;
+  }
+}
+
+// --- État de sélection EXPLICITE (H3-008D1Q36K) ---
+// selectedProfileIdSet/noneApplicableChecked sont la SEULE source de
+// vérité pour ce qui sera envoyé au backend — jamais re-dérivés d'une
+// interrogation du DOM au moment de l'enregistrement (querySelectorAll ne
+// sert plus qu'à la synchronisation VISUELLE des cases déjà cochées).
+// Chaque case à cocher réelle appelle handleProfileCheckboxToggle/
+// handleNoneApplicableToggle — exactement les mêmes fonctions qu'un test
+// peut appeler directement sans DOM réel.
+var selectedProfileIdSet = new Set();
+var noneApplicableChecked = false;
+
+// renderCatalog — H3-008D1Q36K §5/§16 : rendu ENTIÈREMENT depuis les
+// données du catalogue reçues du backend, aucun profile_id/nom codé en
+// dur. Présélectionne les profils déjà retenus par la revue courante
+// (REVIEWED_WITH_PROFILES) ; ne présélectionne rien pour NOT_REVIEWED ni
+// REVIEWED_NONE_APPLICABLE (§8 : un formulaire vide ne doit jamais être
+// visuellement confondu entre ces deux états — voir renderState
+// ci-dessus, qui les distingue déjà par le bandeau).
+function renderCatalog() {
+  const list = document.getElementById('profileList');
+  selectedProfileIdSet = new Set((currentReview && currentReview.reviewed ? currentReview.selections || [] : []).map(s => s.profile_id));
+  noneApplicableChecked = !!(currentReview && currentReview.reviewed && (currentReview.selections || []).length === 0);
+
+  if (catalog.length === 0) {
+    list.innerHTML = '<div class="empty">Aucun profil dans le catalogue.</div>';
+  } else {
+    list.innerHTML = catalog.map(p => `
+      <div class="profile-row" data-profile-row="${esc(p.profile_id)}">
+        <input type="checkbox" class="profile-checkbox" id="profile-${esc(p.profile_id)}" data-profile-id="${esc(p.profile_id)}" ${selectedProfileIdSet.has(p.profile_id) ? 'checked' : ''}>
+        <label for="profile-${esc(p.profile_id)}">
+          <span class="name">${esc(p.name)}</span><span class="id">${esc(p.profile_id)}</span>
+          <div class="desc">${esc(p.description || '')}</div>
+          ${p.parent_id ? `<div class="parent">Spécialisation de : ${esc(p.parent_id)}</div>` : ''}
+        </label>
+      </div>
+    `).join('');
+  }
+
+  const noneBox = document.getElementById('noneApplicableCheckbox');
+  noneBox.checked = noneApplicableChecked;
+  applyNoneApplicableUI();
+
+  document.querySelectorAll('.profile-checkbox').forEach(cb => {
+    cb.addEventListener('change', () => handleProfileCheckboxToggle(cb.getAttribute('data-profile-id'), cb.checked));
+  });
+  noneBox.addEventListener('change', () => handleNoneApplicableToggle(noneBox.checked));
+}
+
+// handleProfileCheckboxToggle/handleNoneApplicableToggle — point d'entrée
+// UNIQUE pour toute modification de sélection, appelé aussi bien par un
+// vrai événement DOM que directement par un test (H3-008D1Q36K, testable
+// sans document.querySelectorAll réel).
+function handleProfileCheckboxToggle(profileId, checked) {
+  if (checked) selectedProfileIdSet.add(profileId);
+  else selectedProfileIdSet.delete(profileId);
+  onSelectionChanged();
+}
+
+function handleNoneApplicableToggle(checked) {
+  noneApplicableChecked = checked;
+  if (checked) {
+    selectedProfileIdSet.clear();
+    // Synchronisation VISUELLE uniquement — selectedProfileIdSet (déjà
+    // vidé ci-dessus) reste la seule source de vérité pour l'enregistrement.
+    document.querySelectorAll('.profile-checkbox').forEach(cb => { cb.checked = false; });
+  }
+  applyNoneApplicableUI();
+  onSelectionChanged();
+}
+
+function applyNoneApplicableUI() {
+  document.querySelectorAll('.profile-row').forEach(row => {
+    row.classList.toggle('disabled', noneApplicableChecked);
+    const cb = row.querySelector ? row.querySelector('.profile-checkbox') : null;
+    if (cb) cb.disabled = noneApplicableChecked;
+  });
+}
+
+// onSelectionChanged — toute modification (case profil ou "aucun
+// applicable") invalide la confirmation déjà donnée : §7 du mandat,
+// cocher/décocher ne mute JAMAIS l'état backend par lui-même, et une
+// confirmation porte sur un ensemble précis, jamais sur un ensemble
+// modifié après coup sans reconfirmation.
+function onSelectionChanged() {
+  document.getElementById('confirmCheckbox').checked = false;
+  updateConsequenceText();
+  updateSaveButtonState();
+}
+
+function selectedProfileIds() {
+  if (noneApplicableChecked) return [];
+  return Array.from(selectedProfileIdSet);
+}
+
+// updateConsequenceText — H3-008D1Q36K §11 : la conséquence est décrite
+// GÉNÉRIQUEMENT, jamais une promesse de génération/publication.
+function updateConsequenceText() {
+  const el = document.getElementById('consequenceText');
+  const ids = selectedProfileIds();
+  if (noneApplicableChecked) {
+    el.textContent = "Pandore considérera qu'aucun profil de domaine du catalogue ne s'applique à ce client.";
+  } else if (ids.length > 0) {
+    el.textContent = `Pandore considérera que les profils suivants s'appliquent à ce client : ${ids.join(', ')}.`;
+  } else {
+    el.textContent = "Cette revue détermine quelles exigences de connaissance de domaine Pandore considère comme applicables à ce client.";
+  }
+}
+
+function resetConfirmation() {
+  document.getElementById('confirmCheckbox').checked = false;
+  updateConsequenceText();
+  updateSaveButtonState();
+  document.getElementById('saveMsg').textContent = '';
+  document.getElementById('saveMsg').className = 'msg';
+}
+
+function updateSaveButtonState() {
+  document.getElementById('saveBtn').disabled = !document.getElementById('confirmCheckbox').checked;
+}
+
+document.getElementById('confirmCheckbox').addEventListener('change', updateSaveButtonState);
+document.getElementById('refreshBtn').addEventListener('click', loadAll);
+
+// saveReview — H3-008D1Q36K §9/§10 : remplacement COMPLET de l'ensemble
+// authoritatif (jamais un ajout/retrait incrémental) ; reviewed_by n'est
+// jamais envoyé (dérivé côté Go de la session authentifiée, §12). En cas
+// d'échec, les choix locaux non enregistrés restent inchangés (§10 :
+// jamais un succès affiché avant que le POST n'ait réellement réussi,
+// jamais de nouvelle tentative silencieuse).
+async function saveReview() {
+  const saveBtn = document.getElementById('saveBtn');
+  const msgEl = document.getElementById('saveMsg');
+  if (!document.getElementById('confirmCheckbox').checked) return;
+  const ids = selectedProfileIds();
+  const selections = ids.map(id => ({ profile_id: id, kind: deriveProfileKind(id) }));
+
+  saveBtn.disabled = true;
+  msgEl.className = 'msg';
+  msgEl.textContent = 'Enregistrement…';
+  try {
+    await apiWithPandoreSession(`/api/admin/tenants/${encodeURIComponent(currentTenantId)}/domain-profile-selections`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reviewed: true, selections }),
+    });
+    // loadAll() rafraîchit l'état authoritatif ET réinitialise la
+    // confirmation (resetConfirmation, appelé par loadAll) — le message de
+    // succès doit donc être posé APRÈS, jamais avant, sous peine d'être
+    // immédiatement effacé par cette même réinitialisation (bogue réel
+    // détecté par TEST Q, corrigé ici).
+    await loadAll();
+    document.getElementById('saveMsg').className = 'msg ok';
+    document.getElementById('saveMsg').textContent = 'Revue enregistrée.';
+  } catch (err) {
+    msgEl.className = 'msg err';
+    msgEl.textContent = err.message || 'Enregistrement impossible.';
+    // §10 — les choix locaux (cases cochées, "aucun applicable") restent
+    // affichés tels quels : ni rechargement, ni réinitialisation ici.
+    updateSaveButtonState();
+  }
+}
+document.getElementById('saveBtn').addEventListener('click', saveReview);
+
+document.getElementById('loginBtn').addEventListener('click', tryLogin);
+document.getElementById('pwInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') tryLogin(); });
+
+async function tryLogin() {
+  const pw = document.getElementById('pwInput').value;
+  localStorage.setItem(PW_KEY, pw);
+  try {
+    await api('/api/admin/contacts');
+    showDashboard();
+  } catch (err) {
+    showGate(true);
+  }
+}
+
+(async function init() {
+  if (localStorage.getItem(PW_KEY)) {
+    try {
+      await api('/api/admin/contacts');
+      showDashboard();
+    } catch (err) {
+      showGate(false);
+    }
+  } else {
+    showGate(false);
+  }
+})();
+</script>
+</body>
+</html>
