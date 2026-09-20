@@ -86,6 +86,21 @@ global.fetch = async (url, opts = {}) => {
   if (u.pathname === '/admin/tenants/tenant-xyz/social-accounts/account-abc/capabilities/latest-attempt') {
     return jsonResponse(200, { exists: false });
   }
+  // H3-008D1Q28 §4 : depuis H3-008D1Q27, une tentative réelle contre
+  // Facebook ne produit plus qu'UN SEUL effet externe (TOKEN_INTROSPECTION
+  // — RESOURCE_RIGHTS_CHECK a été retiré). Cette fixture prouve que le
+  // relais/l'UI ne suppose JAMAIS deux effets — jamais une régression du
+  // genre "un tableau à 2 éléments codé en dur".
+  if (u.pathname === '/admin/tenants/t_fixture/social-accounts/sa_oneeffect/capabilities/latest-attempt') {
+    return jsonResponse(200, {
+      exists: true, attempt_id: 'attempt-fixture-3', platform: 'facebook',
+      triggered_at: '2026-09-20T09:00:00Z', finished_at: '2026-09-20T09:00:01Z', outcome: 'APPLIED',
+      observations: [{ capability: 'PUBLISH_TEXT', observed_state: 'GRANTED', observed_provenance: 'REAL_OBSERVATION', applied: true }],
+      external_effects: [
+        { sequence: 0, provider: 'facebook', operation_class: 'TOKEN_INTROSPECTION', succeeded: true, duration_ms: 4 },
+      ],
+    });
+  }
   throw new Error('appel Go inattendu dans ce test: ' + u.pathname);
 };
 
@@ -181,6 +196,14 @@ async function main() {
       assert.strictEqual(succeeded.succeeded, true);
       assert.strictEqual(succeeded.failure_class, undefined, 'aucun détail d\'échec fabriqué pour un effet réussi (omitempty côté Go)');
       assert.strictEqual(succeeded.http_status, undefined);
+    });
+
+    await test('6b. H3-008D1Q28: a post-Q27 single-effect attempt (TOKEN_INTROSPECTION only) survives the relay unchanged — never assumed to have 2 effects', async () => {
+      const res = await fetch(`${base}/api/admin/tenants/t_fixture/social-accounts/sa_oneeffect/capabilities/latest-attempt`, { headers: bearerHeaders });
+      assert.strictEqual(res.status, 200);
+      const body = await res.json();
+      assert.strictEqual(body.external_effects.length, 1, 'un effet unique doit rester un effet unique après le relais, jamais complété/tronqué à 2');
+      assert.strictEqual(body.external_effects[0].operation_class, 'TOKEN_INTROSPECTION');
     });
 
     await test('7. this relay never reaches the revalidation route — structurally a GET-only handler, no fallback to POST', async () => {

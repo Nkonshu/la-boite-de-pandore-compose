@@ -100,7 +100,11 @@ function test(name, fn) {
 }
 
 (async () => {
-  await test('a CONNECTED account renders a generic "Revérifier les capacités" button, never a platform-named action', async () => {
+  // H3-008D1Q28 §7 — le libellé a été précisé en "Revérifier l'accès
+  // technique" (depuis H3-008D1Q27, cette action ne relit plus qu'un
+  // TOKEN_INTROSPECTION, jamais les autorisations Page) — reste GÉNÉRIQUE
+  // (jamais un nom de plateforme), seul le libellé exact a changé.
+  await test('a CONNECTED account renders a generic "Revérifier l\'accès technique" button, never a platform-named action', async () => {
     const sandbox = runPage({
       fetchImpl: async (url) => {
         if (url.includes('/api/admin/social-accounts?')) return jsonOk([ACCOUNT_CONNECTED]);
@@ -110,7 +114,7 @@ function test(name, fn) {
     });
     await waitForRender();
     const tbody = sandbox.__elements.get('#accountsTable tbody');
-    assert.ok(tbody.innerHTML.includes('Revérifier les capacités'), 'attendu le bouton générique');
+    assert.ok(tbody.innerHTML.includes("Revérifier l'accès technique"), 'attendu le bouton générique renommé (H3-008D1Q28 §7)');
     assert.ok(!/vérifier facebook/i.test(tbody.innerHTML), 'jamais un libellé nommant la plateforme');
   });
 

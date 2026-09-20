@@ -98,19 +98,20 @@ function test(name, fn) {
 }
 
 (async () => {
-  await test('a page load with no previous attempt renders the authoritative pill without any attempt-note line', async () => {
+  await test('a page load with no previous attempt renders the authoritative pill with no revalidation-attempt line (H3-008D1Q28: the separate authorization-evidence line is always shown, see its own test file)', async () => {
     const sandbox = runPage({
       fetchImpl: async (url) => {
         if (url.includes('/api/admin/social-accounts?')) return jsonOk([ACCOUNT_CONNECTED]);
         if (url.includes('/granted-capabilities')) return jsonOk([]);
         if (url.includes('/capabilities/latest-attempt')) return jsonOk({ exists: false });
+        if (url.includes('/authorization-evidence')) return jsonOk({ exists: false });
         return jsonOk({});
       },
     });
     await waitForRender();
     const tbody = sandbox.__elements.get('#accountsTable tbody');
     assert.ok(tbody.innerHTML.includes('Jamais vérifiée'), 'état autoritaire attendu');
-    assert.ok(!tbody.innerHTML.includes('attempt-note'), 'aucune ligne de tentative pour un compte jamais revérifié');
+    assert.ok(!tbody.innerHTML.includes('Dernière tentative') && !tbody.innerHTML.includes('Dernière revérification'), 'aucune ligne de tentative technique pour un compte jamais revérifié');
   });
 
   await test('reload reconstructs a fresh confirmed (APPLIED) attempt from the persisted read model, distinct from the authoritative pill', async () => {

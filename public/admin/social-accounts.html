@@ -92,6 +92,7 @@
   td.date { color: var(--mute-dim); white-space: nowrap; font-family: 'IBM Plex Mono', monospace; font-size: 12px; }
   td.scopes { color: var(--mute); font-size: 12px; }
   .attempt-note { color: var(--mute); font-size: 12px; margin-top: 4px; }
+  .attempt-note.err { color: var(--bad); }
 
   .pill { display: inline-block; font-family: 'IBM Plex Mono', monospace; font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 999px; text-transform: uppercase; letter-spacing: 0.04em; }
   .pill.connected { background: rgba(61,189,140,0.14); color: var(--good); }
@@ -872,15 +873,35 @@ const CAPABILITY_STATE_LABEL = {
 // H3-008D1Q15 — ferme le READ_MODEL_GAP identifié par l'audit H3-008D1Q14 :
 // jusqu'ici, l'issue d'une revalidation n'existait que dans la réponse
 // POST transitoire — un rechargement de page, un nouvel onglet ou une
-// visite ultérieure ne pouvait plus jamais la reconstruire. Une liste vide
-// (attempt.exists === false) est un résultat NORMAL — "jamais encore
-// revérifié" — jamais une erreur affichée à l'opérateur, même discipline
-// que fetchGrantedCapabilities ci-dessus.
+// visite ultérieure ne pouvait plus jamais la reconstruire. Un résultat
+// {exists:false} est un résultat NORMAL — "jamais encore revérifié" —
+// jamais une erreur affichée à l'opérateur.
+//
+// H3-008D1Q28 §8 — ferme LATEST_ATTEMPT_ERROR_VISIBILITY_DEBT : un échec
+// de LECTURE (session expirée, 5xx Pandore, panne réseau) renvoyait
+// jusqu'ici `null`, rendu par describeLatestAttemptLine EXACTEMENT comme
+// {exists:false} (chaîne vide) — un opérateur ne pouvait pas distinguer
+// "jamais revérifié" de "on ne sait pas, la lecture a échoué". Un sentinel
+// dédié {__readError:true} rend les deux cas visuellement DISTINCTS,
+// jamais fusionnés.
 async function fetchLatestAttempt(tenantId, socialAccountId){
   try{
     return await apiWithPandoreSession(`/api/admin/tenants/${encodeURIComponent(tenantId)}/social-accounts/${encodeURIComponent(socialAccountId)}/capabilities/latest-attempt`);
   }catch(err){
-    return null; // session absente/expirée ou droits insuffisants : affiché comme non disponible, jamais fabriqué
+    return { __readError: true };
+  }
+}
+
+// H3-008D1Q28 (Q23 Lot 5) — signal temporel SÉPARÉ de fetchLatestAttempt
+// ci-dessus (§1 du mandat : "Never combine both timestamps into one
+// generic 'last verified' timestamp") : l'évidence d'autorisation capturée
+// à la connexion (Q26/Q27), jamais rafraîchie par une revalidation de
+// capacité. Même discipline exists/erreur que fetchLatestAttempt.
+async function fetchAuthorizationEvidence(tenantId, socialAccountId){
+  try{
+    return await apiWithPandoreSession(`/api/admin/tenants/${encodeURIComponent(tenantId)}/social-accounts/${encodeURIComponent(socialAccountId)}/authorization-evidence`);
+  }catch(err){
+    return { __readError: true };
   }
 }
 
@@ -918,6 +939,11 @@ function describeExternalEffectFailureNote(effects){
 // (aucune observation Q11 associée) reste honnête sur l'absence de détail
 // — jamais interprétée comme une confirmation ni comme un échec.
 function describeLatestAttemptLine(attempt){
+  // H3-008D1Q28 §8 — un échec de lecture reste VISIBLEMENT distinct de
+  // "jamais revérifié" (chaîne vide ci-dessous pour exists===false).
+  if(attempt && attempt.__readError){
+    return '<div class="attempt-note err">Dernière revérification technique : lecture impossible pour le moment</div>';
+  }
   if(!attempt || !attempt.exists) return '';
   const when = esc(fmtDate(attempt.triggered_at));
   const observation = (attempt.observations || []).find(o => o.capability === 'PUBLISH_TEXT');
@@ -930,19 +956,47 @@ function describeLatestAttemptLine(attempt){
   return `<div class="attempt-note">Dernière revérification : non concluante — état précédent conservé (${when})${describeExternalEffectFailureNote(attempt.external_effects)}</div>`;
 }
 
-function renderCapabilityCell(records, latestAttempt, tenantId, socialAccountId){
-  const button = `<button class="btn btn-ghost btn-sm" style="margin-left:6px;" onclick="revalidateCapabilities('${esc(tenantId)}','${esc(socialAccountId)}')">Revérifier les capacités</button>`;
+// describeAuthorizationEvidenceLine — H3-008D1Q28 (Q23 Lot 5) : rend le
+// signal "Autorisations de la Page" TOUJOURS visible et TOUJOURS honnête
+// (§2/§5/§6 du mandat) :
+//   - jamais "actuellement valides" (personne ne le sait sans un nouvel
+//     appel Meta) ;
+//   - jamais "expirée" du seul fait de l'ancienneté (aucun TTL inventé) ;
+//   - jamais interprété comme permission refusée/manquante/compte
+//     déconnecté/token invalide en l'absence d'évidence — un compte
+//     connecté avant H3-008D1Q26 n'a simplement jamais eu cette capture.
+function describeAuthorizationEvidenceLine(evidence){
+  if(evidence && evidence.__readError){
+    return '<div class="attempt-note err">Autorisations de la Page : lecture impossible pour le moment</div>';
+  }
+  if(!evidence || !evidence.exists){
+    return '<div class="attempt-note">Autorisations de la Page : non encore vérifiées avec le nouveau mécanisme</div>';
+  }
+  const when = esc(fmtDate(evidence.observed_at));
+  return `<div class="attempt-note">Autorisations de la Page : observées lors de la connexion le ${when}</div>`;
+}
+
+// H3-008D1Q28 §7 — le bouton est renommé "Revérifier l'accès technique"
+// (au lieu de "Revérifier les capacités") : depuis H3-008D1Q27, cette
+// action ne déclenche plus qu'un TOKEN_INTROSPECTION (validité du token +
+// scope OAuth) — elle ne relit JAMAIS les autorisations Page auprès de
+// Meta. L'ancien libellé laissait raisonnablement croire l'inverse. La
+// ligne "Autorisations de la Page" ci-dessous reste le SEUL endroit où ce
+// second signal est montré, jamais rafraîchi par ce bouton.
+function renderCapabilityCell(records, latestAttempt, authorizationEvidence, tenantId, socialAccountId){
+  const button = `<button class="btn btn-ghost btn-sm" style="margin-left:6px;" onclick="revalidateCapabilities('${esc(tenantId)}','${esc(socialAccountId)}')">Revérifier l'accès technique</button>`;
   const attemptLine = describeLatestAttemptLine(latestAttempt);
+  const evidenceLine = describeAuthorizationEvidenceLine(authorizationEvidence);
   if(records === null){
-    return '<span class="pill cap-unverified">Non vérifiable</span>' + button + attemptLine;
+    return '<span class="pill cap-unverified">Non vérifiable</span>' + button + attemptLine + evidenceLine;
   }
   const publish = records.find(r => r.capability === 'PUBLISH_TEXT');
   if(!publish){
-    return '<span class="pill cap-unverified">Jamais vérifiée</span>' + button + attemptLine;
+    return '<span class="pill cap-unverified">Jamais vérifiée</span>' + button + attemptLine + evidenceLine;
   }
   const cls = 'cap-' + publish.state.toLowerCase();
   const label = CAPABILITY_STATE_LABEL[publish.state] || publish.state;
-  return `<span class="pill ${esc(cls)}" title="Publication texte — vérifié ${esc(fmtDate(publish.verified_at))}">${esc(label)}</span>` + button + attemptLine;
+  return `<span class="pill ${esc(cls)}" title="Publication texte — vérifié ${esc(fmtDate(publish.verified_at))}">${esc(label)}</span>` + button + attemptLine + evidenceLine;
 }
 
 // H3-008D1Q11 §8 — la réponse distingue désormais explicitement A. l'état
@@ -996,12 +1050,14 @@ async function render(accounts, tenantId){
   const sorted = [...accounts].sort((a,b) => new Date(b.connected_at) - new Date(a.connected_at));
   // Résolution en parallèle, une lecture par compte — jamais bloquant pour
   // l'affichage des colonnes déjà connues (statut/scopes demandés). H3-008D1Q15 :
-  // l'état autoritaire (capabilitiesByAccount) et l'issue de la dernière
-  // tentative (latestAttemptByAccount) sont deux lectures DISTINCTES,
-  // jamais fusionnées en une seule requête.
-  const [capabilitiesByAccount, latestAttemptByAccount] = await Promise.all([
+  // l'état autoritaire (capabilitiesByAccount), l'issue de la dernière
+  // tentative (latestAttemptByAccount) et l'évidence d'autorisation de
+  // connexion (authorizationEvidenceByAccount, H3-008D1Q28) sont TROIS
+  // lectures DISTINCTES, jamais fusionnées en une seule requête.
+  const [capabilitiesByAccount, latestAttemptByAccount, authorizationEvidenceByAccount] = await Promise.all([
     Promise.all(sorted.map(a => a.status === 'CONNECTED' ? fetchGrantedCapabilities(tenantId, a.id) : Promise.resolve(null))),
     Promise.all(sorted.map(a => a.status === 'CONNECTED' ? fetchLatestAttempt(tenantId, a.id) : Promise.resolve(null))),
+    Promise.all(sorted.map(a => a.status === 'CONNECTED' ? fetchAuthorizationEvidence(tenantId, a.id) : Promise.resolve(null))),
   ]);
   tbody.innerHTML = sorted.map((a, i) => `
     <tr>
@@ -1009,7 +1065,7 @@ async function render(accounts, tenantId){
       <td>${esc(a.display_name || a.external_account_id)}</td>
       <td><span class="pill ${a.status === 'CONNECTED' ? 'connected' : 'revoked'}">${a.status === 'CONNECTED' ? 'connecté' : 'révoqué'}</span></td>
       <td class="scopes">${(a.granted_scopes || []).map(esc).join(', ') || '—'}</td>
-      <td>${a.status === 'CONNECTED' ? renderCapabilityCell(capabilitiesByAccount[i], latestAttemptByAccount[i], tenantId, a.id) : '—'}</td>
+      <td>${a.status === 'CONNECTED' ? renderCapabilityCell(capabilitiesByAccount[i], latestAttemptByAccount[i], authorizationEvidenceByAccount[i], tenantId, a.id) : '—'}</td>
       <td class="date">${fmtDate(a.connected_at)}</td>
       <td>${a.status === 'CONNECTED'
         ? `<button class="btn btn-danger btn-sm" onclick="revoke('${esc(a.id)}')">Révoquer</button>`

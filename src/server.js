@@ -882,6 +882,30 @@ app.get('/api/admin/tenants/:id/social-accounts/:social_account_id/capabilities/
   }
 });
 
+// GET /api/admin/tenants/:id/social-accounts/:social_account_id/authorization-evidence
+// — H3-008D1Q28 (Q23 Lot 5) : lecture de la DERNIÈRE évidence
+// d'autorisation capturée à la connexion (jamais un nouvel appel
+// provider — le handler Go correspondant ne fait qu'une lecture DB pure).
+// Signal temporel DISTINCT de latest-attempt ci-dessus, jamais fusionné
+// avec lui côté UI. Même identité Bearer Pandore, ajoutée explicitement
+// ICI dès l'introduction de la route Go — jamais laissée reproduire
+// l'omission H3-008D1Q16C constatée pour latest-attempt.
+app.get('/api/admin/tenants/:id/social-accounts/:social_account_id/authorization-evidence', async (req, res) => {
+  if (!checkAdmin(req, res)) return;
+  const authorization = requirePandoreBearer(req, res);
+  if (!authorization) return;
+  try {
+    const goRes = await fetch(`${PANDORE_API_BASE}/admin/tenants/${encodeURIComponent(req.params.id)}/social-accounts/${encodeURIComponent(req.params.social_account_id)}/authorization-evidence`, {
+      headers: { Authorization: authorization },
+    });
+    const data = await goRes.json().catch(() => ({}));
+    res.status(goRes.status).json(data);
+  } catch (err) {
+    console.error('authorization-evidence proxy:', err.message);
+    res.status(502).json({ error: 'Lecture impossible pour le moment' });
+  }
+});
+
 // --- H3-008D1K — Platform Integration Configuration (Niveau A) : relais
 // THIN GÉNÉRIQUE vers GET/PUT /admin/platform-integrations[/:platform]
 // (Go, H3-008D1G/H3-008D1I, déjà génériques et schema-driven — aucun champ
