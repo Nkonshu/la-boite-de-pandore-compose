@@ -144,7 +144,7 @@ test('a crumb without href is never rendered as a link (no fabricated destinatio
 // --- 15 — l'ancien lien universel "← Contacts & audits" n'est plus une
 // structure de navigation globale codée en dur. ---
 
-const PAGES = ['index.html', 'audit-review.html', 'social-accounts.html', 'platform-integrations.html', 'administration.html'];
+const PAGES = ['index.html', 'audit-review.html', 'social-accounts.html', 'platform-integrations.html', 'administration.html', 'knowledge-candidates.html'];
 
 test('none of the admin pages hardcode the old universal "← Contacts & audits" back-link anymore', () => {
   for (const page of PAGES) {
@@ -159,6 +159,23 @@ test('every admin page includes the shared nav.js and calls AdminNav.render', ()
     assert.ok(html.includes('src="/admin/nav.js"'), `${page}: nav.js non inclus`);
     assert.ok(html.includes('AdminNav.render('), `${page}: AdminNav.render jamais appelé`);
   }
+});
+
+// --- H3-008D1Q36N4A-5D32 — Connaissances à valider : page tenant-scoped de la zone clients ---
+
+test('knowledge-candidates.html registers under the clients zone with the "Connaissances à valider" crumb, tenant from URL params only', () => {
+  const html = fs.readFileSync(path.join(ADMIN_DIR, 'knowledge-candidates.html'), 'utf8');
+  assert.ok(/zone:\s*'clients'/.test(html), 'knowledge-candidates.html doit se déclarer dans la zone clients');
+  assert.ok(!/zone:\s*'administration'/.test(html), 'jamais dans la zone administration');
+  assert.ok(html.includes("label: 'Connaissances à valider'"), "fil d'Ariane « Connaissances à valider » manquant");
+  assert.ok(html.includes("params.get('tenant_id')") && html.includes("params.get('client_name')"), 'tenant issu des paramètres tenant_id/client_name existants');
+});
+
+test('audit-review.html links the approved tenant to knowledge-candidates.html with encoded tenant_id (and client_name once resolved)', () => {
+  const html = fs.readFileSync(path.join(ADMIN_DIR, 'audit-review.html'), 'utf8');
+  assert.ok(html.includes('/admin/knowledge-candidates.html?tenant_id=${encodeURIComponent(d.tenant_id)}'), "lien d'entrée avec tenant_id encodé manquant");
+  assert.ok(html.includes('Connaissances à valider'), 'libellé du lien manquant');
+  assert.ok(html.includes('&client_name=${encodeURIComponent(tenant.name)}'), 'client_name encodé une fois le nom résolu');
 });
 
 // --- Intégrations plateforme reste globale, jamais scopée tenant ---

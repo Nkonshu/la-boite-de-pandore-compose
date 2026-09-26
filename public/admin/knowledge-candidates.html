@@ -1,0 +1,630 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Connaissances à valider — La Boîte de Pandore</title>
+<meta name="robots" content="noindex">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg?v=2">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0B0D10;
+    --surface: #14171C;
+    --surface-raised: #1C2027;
+    --accent: #E8A33D;
+    --good: #3DBD8C;
+    --bad: #E2685A;
+    --text: #F3F1EC;
+    --mute: #8B909A;
+    --mute-dim: #5B616B;
+    --border: #262B33;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'IBM Plex Sans', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1, h2, h3 { font-family: 'Instrument Sans', 'IBM Plex Sans', sans-serif; margin: 0; }
+  a { color: var(--accent); }
+
+  .gate { min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+  .gate-box { width: 100%; max-width: 360px; padding: 24px; }
+  .gate-box h1 { font-size: 22px; margin-bottom: 20px; }
+  .gate-box input {
+    width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 13px 14px; color: var(--text); font-family: inherit; font-size: 15px; margin-bottom: 14px;
+  }
+  .gate-box input:focus { outline: none; border-color: var(--accent); }
+  .gate-box .err { color: var(--bad); font-size: 13px; margin-bottom: 12px; display: none; }
+  .gate-box .err.show { display: block; }
+
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    background: var(--accent); color: #201404; font-weight: 700; font-size: 14px;
+    padding: 11px 22px; border-radius: 999px; border: none; cursor: pointer;
+  }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn:focus-visible, input:focus-visible, a:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 2px;
+  }
+  .btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--text); font-weight: 600; }
+  .btn-sm { padding: 6px 14px; font-size: 12.5px; }
+  .btn-ghost.active { border-color: var(--accent); color: var(--accent); }
+
+  #dashboard { display: none; }
+  #dashboard.show { display: block; }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 40px 24px 90px; }
+  @media (max-width: 520px) {
+    .wrap { padding: 20px 14px 70px; }
+    .view-switch { width: 100%; }
+  }
+  .topbar { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 12px; }
+  .topbar h1 { font-size: 24px; font-weight: 700; }
+  .topbar .sub { font-size: 13px; color: var(--mute-dim); }
+
+  .panel { margin-bottom: 28px; }
+  .panel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; flex-wrap: wrap; gap: 10px; }
+  .panel h2 {
+    font-family: 'IBM Plex Mono', monospace; font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--accent);
+  }
+  .panel p.help { font-size: 13px; color: var(--mute); margin: 0 0 12px; }
+  .view-switch { display: flex; gap: 8px; }
+
+  table { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  .table-scroll { overflow-x: auto; border-radius: 12px; }
+  th, td { text-align: left; padding: 12px 14px; font-size: 13.5px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--mute-dim); font-weight: 600; }
+  tr:last-child td { border-bottom: none; }
+  td.date { color: var(--mute-dim); white-space: nowrap; font-family: 'IBM Plex Mono', monospace; font-size: 12px; }
+  td.actions { white-space: nowrap; display: table-cell; }
+  td.actions .btn + .btn { margin-left: 6px; }
+  .req-desc { font-weight: 600; }
+  .req-key, .mono { font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; color: var(--mute-dim); word-break: break-all; }
+  .req-key { display: block; margin-top: 3px; }
+  .pill { display: inline-block; font-family: 'IBM Plex Mono', monospace; font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 999px; text-transform: uppercase; letter-spacing: 0.04em; background: rgba(139,144,154,0.14); color: var(--mute); }
+  .empty-row td { text-align: center; color: var(--mute-dim); padding: 28px; }
+  .error-row td { text-align: center; color: var(--bad); padding: 28px; }
+
+  .msg { font-size: 13px; margin-top: 12px; min-height: 18px; }
+  .msg.err { color: var(--bad); }
+  .msg.ok { color: var(--good); }
+  .empty { font-size: 13px; color: var(--mute-dim); padding: 16px; text-align: center; }
+</style>
+</head>
+<body>
+
+<div class="gate" id="gate">
+  <div class="gate-box">
+    <h1>Administration — La Boîte de Pandore</h1>
+    <input type="password" id="pwInput" placeholder="Mot de passe" autocomplete="current-password" aria-label="Mot de passe d'accès à l'administration">
+    <div class="err" id="gateErr">Mot de passe incorrect.</div>
+    <button class="btn" id="loginBtn" style="width:100%">Se connecter</button>
+  </div>
+</div>
+
+<div id="dashboard">
+  <div class="wrap">
+    <div id="pandoreSessionBar" style="margin-bottom:24px;padding:10px 14px;background:var(--surface);border:1px solid var(--border);border-radius:10px;font-size:13px;"></div>
+
+    <div id="adminNav"></div>
+
+    <div class="topbar">
+      <div>
+        <h1 id="clientNameHeading">Connaissances à valider</h1>
+        <div class="sub">Informations que Pandore propose de demander au client</div>
+      </div>
+      <button class="btn btn-ghost btn-sm" id="refreshBtn">Rafraîchir</button>
+    </div>
+
+    <div class="empty" id="noTenantMsg" style="display:none;">Cette page nécessite un tenant_id (accédez-y depuis la fiche d'un client approuvé).</div>
+
+    <div class="panel" id="queuePanel" style="display:none;">
+      <div class="panel-head">
+        <h2 id="viewTitle">À traiter</h2>
+        <div class="view-switch" role="group" aria-label="Vue de la file">
+          <button type="button" class="btn btn-ghost btn-sm active" id="viewPendingBtn" aria-pressed="true">À traiter</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="viewRejectedBtn" aria-pressed="false">Rejetés</button>
+        </div>
+      </div>
+      <p class="help" id="viewHelp">Autorisez ou rejetez chaque information proposée. Autoriser ne signifie pas qu'un email est déjà envoyé.</p>
+      <div class="table-scroll">
+        <table id="candidatesTable">
+          <thead id="candidatesHead"></thead>
+          <tbody id="candidatesBody"><tr class="empty-row"><td colspan="7">Chargement…</td></tr></tbody>
+        </table>
+      </div>
+      <div class="msg" id="actionMsg" role="status" aria-live="polite"></div>
+    </div>
+  </div>
+</div>
+
+<script src="/admin/nav.js"></script>
+<script>
+const PW_KEY = 'pandore_admin_pw';
+// Même pont d'identité que domain-applicability.html / social-accounts.html :
+// ADMIN_PASSWORD reste la porte d'accès à la page, PANDORE_SESSION_KEY est
+// l'identité Pandore réelle (User/Session/Role), seule source d'autorisation
+// pour lire la file et décider. sessionStorage : ce Bearer ne survit pas à la
+// fermeture de l'onglet. Aucun secret n'est jamais codé en dur ici.
+const PANDORE_SESSION_KEY = 'pandore_session';
+
+// --- Contrat backend (Go D30 / D28), via le relais Compose --------------------
+// Élément de la file (GET) : { candidate_id, tenant_id, status, requirement_key,
+//   requirement_description|null, cardinality, importance, reason,
+//   source_generation_request_id|null, created_at, decision|null, decided_at|null,
+//   decided_by_user_id|null, decided_by_role|null }
+// Décision (POST authorize/reject) : { tenant_id, candidate_id, status, decision,
+//   decision_result: 'DECIDED'|'REPLAYED_SAME_DECISION', outcome|null,
+//   authorized_channel|null, resulting_clarification_request_id|null, decided_at,
+//   decided_by_user_id, decided_by_role }
+// Erreur : { error: { code, message, request_id } } — le code est la SEULE
+// autorité de branchement ; le texte du message n'est jamais lu.
+
+const VIEW_PENDING = 'PENDING_REVIEW';
+const VIEW_REJECTED = 'REJECTED';
+
+const CONFIRM_AUTHORIZE = "Autoriser Pandore à demander cette information au client par email ? Pandore revérifie les conditions avant de créer la demande. Aucun email n'est envoyé par cette action seule.";
+const CONFIRM_REJECT = 'Rejeter ce candidat ? Décision définitive : Pandore ne le reproposera pas automatiquement pour cette information.';
+
+// Table explicite keyée par l'enum backend (jamais modifié ici). Un outcome
+// inconnu retombe sur un message de succès générique, sans sémantique inventée.
+const OUTCOME_MESSAGES = {
+  ACQUISITION_CREATED: "Demande d'information créée.",
+  NOT_NEEDED_ALREADY_KNOWN: "Aucune demande nécessaire : l'information est déjà connue.",
+  ALREADY_PENDING: "Une demande est déjà en cours pour cette information.",
+  SUPPRESSED_ANSWERED_UNKNOWN: "Aucune demande : le client a déjà répondu qu'il ne sait pas.",
+  SUPPRESSED_DELIVERED_UNANSWERED: "Aucune demande : une demande précédente est restée sans réponse.",
+  SUPPRESSED_UNSUPPORTED_REFRESH: "Aucune demande : la mise à jour de cette information n'est pas gérée automatiquement.",
+  NO_LONGER_APPLICABLE: "Aucune demande : cette information ne s'applique plus à ce client.",
+  NO_LONGER_CLIENT_OWNED: "Aucune demande : cette information n'est plus à demander au client.",
+  METADATA_CHANGED: "Aucune demande : la définition de cette information a changé.",
+};
+const GENERIC_SUCCESS_MESSAGE = 'Décision enregistrée.';
+const REJECT_SUCCESS_MESSAGE = 'Candidat rejeté.';
+const TECHNICAL_ERROR_MESSAGE = 'Une erreur technique est survenue.';
+const ACCESS_DENIED_MESSAGE = 'Accès refusé.';
+
+// Messages d'erreur d'ACTION, keyés par CODE d'erreur backend. `refetch` :
+// la décision d'un autre opérateur / la disparition du candidat rendent la
+// vue obsolète -> relecture. Les 422 laissent le candidat PENDING (rien n'est
+// retiré, rien n'est simulé, aucune nouvelle tentative automatique).
+const ACTION_ERRORS = {
+  KNOWLEDGE_ACQUISITION_CANDIDATE_ALREADY_DECIDED: { message: 'Ce candidat a déjà été décidé par un autre opérateur ou par une décision opposée.', refetch: true },
+  NOT_FOUND: { message: 'Candidat introuvable.', refetch: true },
+  APPLICABILITY_UNKNOWN: { message: "Impossible pour le moment : l'applicabilité doit être déterminée.", refetch: false },
+  NO_ELIGIBLE_QUESTION_BRICK: { message: "Aucune question compatible n'est disponible.", refetch: false },
+  AMBIGUOUS_QUESTION_BRICK_SELECTION: { message: 'Plusieurs questions compatibles empêchent une sélection sûre.', refetch: false },
+  NO_VERIFIED_EMAIL_CONTACT: { message: "Aucun contact email vérifié n'est disponible.", refetch: false },
+  AMBIGUOUS_VERIFIED_EMAIL_CONTACT: { message: 'Plusieurs contacts email vérifiés empêchent une sélection sûre.', refetch: false },
+};
+
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function fmtDate(iso) {
+  if (!iso) return '';
+  return new Date(iso).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' });
+}
+
+function getPandoreSession() {
+  try { return JSON.parse(sessionStorage.getItem(PANDORE_SESSION_KEY) || 'null'); }
+  catch { return null; }
+}
+function setPandoreSession(session) {
+  sessionStorage.setItem(PANDORE_SESSION_KEY, JSON.stringify(session));
+}
+function clearPandoreSession() {
+  sessionStorage.removeItem(PANDORE_SESSION_KEY);
+}
+
+function renderSessionBar() {
+  const bar = document.getElementById('pandoreSessionBar');
+  if (!bar) return;
+  const session = getPandoreSession();
+  if (session && session.token) {
+    bar.innerHTML = `
+      Connecté en tant que : <b>${esc(session.user.email)}</b> (${esc(session.user.role)})
+      <button class="btn btn-ghost btn-sm" id="pandoreLogoutBtn" style="margin-left:10px;">Déconnexion</button>
+    `;
+    document.getElementById('pandoreLogoutBtn').addEventListener('click', pandoreLogout);
+    loadCandidates();
+  } else {
+    bar.innerHTML = `
+      <div style="margin-bottom:6px;color:var(--mute,#8B909A);">Session Pandore requise pour lire et décider (identité distincte du mot de passe d'accès à cette page).</div>
+      <input type="email" id="pandoreEmail" placeholder="email Pandore" aria-label="Email Pandore" style="margin-right:6px;">
+      <input type="password" id="pandorePassword" placeholder="mot de passe" aria-label="Mot de passe Pandore" style="margin-right:6px;">
+      <button class="btn btn-sm" id="pandoreLoginBtn">Connexion Pandore</button>
+      <div class="err show" id="pandoreLoginErr" style="display:none;margin-top:6px;"></div>
+    `;
+    document.getElementById('pandoreLoginBtn').addEventListener('click', pandoreLogin);
+  }
+}
+
+async function pandoreLogin() {
+  const email = document.getElementById('pandoreEmail').value.trim();
+  const password = document.getElementById('pandorePassword').value;
+  const errEl = document.getElementById('pandoreLoginErr');
+  errEl.style.display = 'none';
+  try {
+    const res = await api('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      errEl.textContent = (data.error && data.error.message) || 'Connexion Pandore refusée.';
+      errEl.style.display = 'block';
+      return;
+    }
+    setPandoreSession({ token: data.token, user: data.user });
+    renderSessionBar();
+  } catch (err) {
+    errEl.textContent = 'Connexion Pandore impossible.';
+    errEl.style.display = 'block';
+  }
+}
+
+async function pandoreLogout() {
+  const session = getPandoreSession();
+  clearPandoreSession();
+  renderSessionBar();
+  if (session && session.token) {
+    try { await api('/api/auth/logout', { method: 'POST', headers: { Authorization: `Bearer ${session.token}` } }); }
+    catch { /* déconnexion locale déjà faite, un échec réseau ici n'est pas bloquant */ }
+  }
+}
+
+// api — même patron que partout ailleurs dans ce dépôt : x-admin-password
+// systématique, 401 renvoie à la porte legacy.
+async function api(path, opts = {}) {
+  const pw = localStorage.getItem(PW_KEY) || '';
+  const res = await fetch(path, {
+    ...opts,
+    headers: { ...(opts.headers || {}), 'x-admin-password': pw },
+  });
+  if (res.status === 401) {
+    localStorage.removeItem(PW_KEY);
+    showGate(true);
+    throw new Error('unauthorized');
+  }
+  return res;
+}
+
+// apiWithPandoreSession — extension LOCALE minimale de la version de
+// domain-applicability.html : conserve err.status ET err.code. Un 401 est
+// distingué SANS lire de texte : le refus du mot de passe admin par Compose
+// est {error: "<chaîne>"}, alors que celui du Bearer Pandore (Compose ou Go)
+// est l'enveloppe {error: {code, message}}.
+//   - mot de passe admin refusé : PW_KEY effacé, porte legacy (comportement actuel) ;
+//   - session Pandore refusée : efface UNIQUEMENT PANDORE_SESSION_KEY et
+//     re-rend la barre de connexion.
+async function apiWithPandoreSession(path, opts = {}) {
+  const session = getPandoreSession();
+  if (!session || !session.token) {
+    const err = new Error('Session Pandore requise.');
+    err.code = 'SESSION_REQUIRED';
+    throw err;
+  }
+  const pw = localStorage.getItem(PW_KEY) || '';
+  const res = await fetch(path, {
+    ...opts,
+    headers: { ...(opts.headers || {}), 'x-admin-password': pw, Authorization: `Bearer ${session.token}` },
+  });
+  const data = await res.json().catch(() => ({}));
+  if (res.status === 401) {
+    const adminPasswordRefused = !!data && typeof data.error === 'string';
+    if (adminPasswordRefused) {
+      localStorage.removeItem(PW_KEY);
+      showGate(true);
+      const err = new Error('unauthorized');
+      err.status = 401;
+      err.code = 'ADMIN_PASSWORD_REFUSED';
+      throw err;
+    }
+    clearPandoreSession();
+    renderSessionBar();
+    const err = new Error('Session Pandore expirée — reconnectez-vous.');
+    err.status = 401;
+    err.code = 'SESSION_EXPIRED';
+    throw err;
+  }
+  if (!res.ok) {
+    const envelope = data && typeof data.error === 'object' && data.error ? data.error : null;
+    const err = new Error(envelope && envelope.message ? envelope.message : `Erreur ${res.status}`);
+    err.status = res.status;
+    err.code = envelope ? envelope.code : undefined;
+    throw err;
+  }
+  return data;
+}
+
+function showGate(withError) {
+  document.getElementById('gate').style.display = 'flex';
+  document.getElementById('dashboard').classList.remove('show');
+  document.getElementById('gateErr').classList.toggle('show', !!withError);
+}
+
+// --- Wrappers API page-locaux ---------------------------------------------------
+function candidatesBasePath(tenantId) {
+  return `/api/admin/tenants/${encodeURIComponent(tenantId)}/knowledge-acquisition-candidates`;
+}
+
+// listCandidates — la vue PENDING_REVIEW n'ajoute AUCUN paramètre (Go applique
+// son défaut) ; la vue REJECTED ajoute status=REJECTED. Jamais CLOSED.
+function listCandidates(tenantId, view) {
+  const query = view === VIEW_REJECTED ? '?status=REJECTED' : '';
+  return apiWithPandoreSession(candidatesBasePath(tenantId) + query);
+}
+
+// authorize/reject — POST SANS corps (D28 exige un corps strictement vide) :
+// ni body, ni "{}", ni Content-Type.
+function authorizeCandidate(tenantId, candidateId) {
+  return apiWithPandoreSession(`${candidatesBasePath(tenantId)}/${encodeURIComponent(candidateId)}/authorize`, { method: 'POST' });
+}
+function rejectCandidate(tenantId, candidateId) {
+  return apiWithPandoreSession(`${candidatesBasePath(tenantId)}/${encodeURIComponent(candidateId)}/reject`, { method: 'POST' });
+}
+
+// --- État de la page ------------------------------------------------------------
+var currentTenantId = null;
+var currentBusinessName = null;
+var currentView = VIEW_PENDING;
+var candidates = [];
+var loadState = 'loading';     // 'loading' | 'ok' | 'error'
+var loadErrorMessage = '';
+var loadGeneration = 0;        // compteur monotone : seule la dernière lecture compte
+var actionInFlight = false;    // une action utilisateur = au plus un POST
+
+function showDashboard() {
+  document.getElementById('gate').style.display = 'none';
+  document.getElementById('dashboard').classList.add('show');
+  const params = new URLSearchParams(location.search);
+  currentTenantId = params.get('tenant_id');
+  currentBusinessName = params.get('client_name');
+
+  if (!currentTenantId) {
+    document.getElementById('queuePanel').style.display = 'none';
+    document.getElementById('noTenantMsg').style.display = 'block';
+    updateAdminNav(null);
+    renderSessionBar();
+    return;
+  }
+  document.getElementById('noTenantMsg').style.display = 'none';
+  document.getElementById('queuePanel').style.display = 'block';
+  document.getElementById('clientNameHeading').textContent = currentBusinessName || currentTenantId;
+  updateAdminNav(currentBusinessName || currentTenantId);
+  renderView();
+  renderSessionBar();
+}
+
+// updateAdminNav — fil d'Ariane "Clients & Prospects > <nom client> > Connaissances
+// à valider" (nav.js), même patron que domain-applicability.html.
+function updateAdminNav(businessName) {
+  const crumbs = businessName ? [{ label: businessName }, { label: 'Connaissances à valider' }] : [{ label: 'Connaissances à valider' }];
+  AdminNav.render(document.getElementById('adminNav'), { zone: 'clients', crumbs });
+}
+
+function setMsg(kind, text) {
+  const el = document.getElementById('actionMsg');
+  el.className = 'msg' + (kind ? ' ' + kind : '');
+  el.textContent = text || '';
+}
+
+// --- Rendu -----------------------------------------------------------------------
+function requirementCell(c) {
+  const description = c.requirement_description;
+  if (description) {
+    return `<span class="req-desc">${esc(description)}</span><span class="req-key">${esc(c.requirement_key)}</span>`;
+  }
+  return `<span class="req-desc">${esc(c.requirement_key)}</span>`;
+}
+
+function renderHead() {
+  const head = document.getElementById('candidatesHead');
+  head.innerHTML = currentView === VIEW_REJECTED
+    ? '<tr><th>Information</th><th>Importance</th><th>Cardinalité</th><th>Raison</th><th>Créé le</th><th>Rejeté le</th><th>Par</th></tr>'
+    : '<tr><th>Information</th><th>Importance</th><th>Cardinalité</th><th>Raison</th><th>Créé le</th><th>Génération source</th><th>Actions</th></tr>';
+}
+
+function renderView() {
+  const pending = currentView === VIEW_PENDING;
+  document.getElementById('viewTitle').textContent = pending ? 'À traiter' : 'Rejetés';
+  document.getElementById('viewHelp').textContent = pending
+    ? "Autorisez ou rejetez chaque information proposée. Autoriser ne signifie pas qu'un email est déjà envoyé."
+    : 'Candidats déjà rejetés — information seule : aucune action possible. Pandore ne les reproposera pas automatiquement.';
+  const pendingBtn = document.getElementById('viewPendingBtn');
+  const rejectedBtn = document.getElementById('viewRejectedBtn');
+  pendingBtn.classList.toggle('active', pending);
+  rejectedBtn.classList.toggle('active', !pending);
+  pendingBtn.setAttribute('aria-pressed', String(pending));
+  rejectedBtn.setAttribute('aria-pressed', String(!pending));
+}
+
+// renderTable — l'ordre reçu du backend (FIFO) est conservé tel quel : aucun tri
+// côté client, l'importance n'est qu'une information affichée. Les lignes REJECTED
+// n'ont AUCUNE action. Pendant une action, toutes les actions sont désactivées.
+function renderTable() {
+  const body = document.getElementById('candidatesBody');
+  const columns = 7;
+  renderHead();
+  if (loadState === 'loading') {
+    body.innerHTML = `<tr class="empty-row"><td colspan="${columns}">Chargement…</td></tr>`;
+    return;
+  }
+  if (loadState === 'error') {
+    body.innerHTML = `<tr class="error-row"><td colspan="${columns}">${esc(loadErrorMessage)}</td></tr>`;
+    return;
+  }
+  if (candidates.length === 0) {
+    const text = currentView === VIEW_REJECTED ? 'Aucun candidat rejeté.' : 'Aucun élément à examiner.';
+    body.innerHTML = `<tr class="empty-row"><td colspan="${columns}">${text}</td></tr>`;
+    return;
+  }
+  const disabled = actionInFlight ? ' disabled' : '';
+  body.innerHTML = candidates.map(c => {
+    const common = `
+      <td>${requirementCell(c)}</td>
+      <td><span class="pill">${esc(c.importance)}</span></td>
+      <td>${esc(c.cardinality)}</td>
+      <td><code class="mono">${esc(c.reason)}</code></td>
+      <td class="date">${esc(fmtDate(c.created_at))}</td>`;
+    if (currentView === VIEW_REJECTED) {
+      return `<tr data-candidate-id="${esc(c.candidate_id)}">${common}
+      <td class="date">${esc(fmtDate(c.decided_at))}</td>
+      <td>${esc(c.decided_by_role || '—')}${c.decided_by_user_id ? `<span class="mono" style="display:block;">${esc(c.decided_by_user_id)}</span>` : ''}</td>
+    </tr>`;
+    }
+    const generation = c.source_generation_request_id ? `<code class="mono">${esc(c.source_generation_request_id)}</code>` : '—';
+    return `<tr data-candidate-id="${esc(c.candidate_id)}">${common}
+      <td>${generation}</td>
+      <td class="actions">
+        <button type="button" class="btn btn-sm" data-action="authorize" data-candidate-id="${esc(c.candidate_id)}"${disabled}>Autoriser</button>
+        <button type="button" class="btn btn-ghost btn-sm" data-action="reject" data-candidate-id="${esc(c.candidate_id)}"${disabled}>Rejeter</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+// --- Lecture (avec garde contre les réponses obsolètes) ----------------------------
+function loadFailureMessage(err) {
+  if (err && err.code === 'SESSION_EXPIRED') return 'Session Pandore expirée — reconnectez-vous.';
+  if (err && err.code === 'SESSION_REQUIRED') return 'Session Pandore requise.';
+  if (err && (err.status === 403 || err.code === 'FORBIDDEN')) return ACCESS_DENIED_MESSAGE;
+  return 'Lecture impossible pour le moment.';
+}
+
+async function loadCandidates() {
+  if (!currentTenantId) return;
+  const generation = ++loadGeneration;
+  const view = currentView;
+  loadState = 'loading';
+  renderTable();
+  try {
+    const data = await listCandidates(currentTenantId, view);
+    if (generation !== loadGeneration) return;   // réponse obsolète : ignorée
+    if (!Array.isArray(data)) throw new Error('réponse inattendue');
+    candidates = data;
+    loadState = 'ok';
+    loadErrorMessage = '';
+    renderTable();
+  } catch (err) {
+    if (generation !== loadGeneration) return;
+    candidates = [];
+    loadState = 'error';
+    loadErrorMessage = loadFailureMessage(err);
+    renderTable();
+    setMsg('err', loadErrorMessage);
+  }
+}
+
+function switchView(view) {
+  if (view !== VIEW_PENDING && view !== VIEW_REJECTED) return;
+  currentView = view;
+  candidates = [];
+  setMsg('', '');
+  renderView();
+  loadCandidates();
+}
+
+// --- Actions ------------------------------------------------------------------------
+function successMessage(action, result) {
+  if (action === 'reject') return REJECT_SUCCESS_MESSAGE;
+  const outcome = result && result.outcome;
+  if (typeof outcome === 'string' && Object.prototype.hasOwnProperty.call(OUTCOME_MESSAGES, outcome)) return OUTCOME_MESSAGES[outcome];
+  return GENERIC_SUCCESS_MESSAGE;
+}
+
+// describeActionError — branche UNIQUEMENT sur err.code / err.status, jamais sur
+// err.message : aucun texte backend n'est jamais affiché.
+function describeActionError(err) {
+  const code = err && err.code;
+  if (typeof code === 'string' && Object.prototype.hasOwnProperty.call(ACTION_ERRORS, code)) return ACTION_ERRORS[code];
+  if (err && (err.status === 403 || code === 'FORBIDDEN')) return { message: ACCESS_DENIED_MESSAGE, refetch: false };
+  if (err && code === 'SESSION_EXPIRED') return { message: 'Session Pandore expirée — reconnectez-vous.', refetch: false };
+  return { message: TECHNICAL_ERROR_MESSAGE, refetch: false };
+}
+
+// handleAction — une action utilisateur = au plus UN POST. Le drapeau
+// actionInFlight est posé de façon synchrone (avant tout await) : un second clic
+// est ignoré. Annuler la confirmation n'envoie rien et ne laisse aucun état.
+async function handleAction(action, candidateId) {
+  if (actionInFlight) return;
+  if (!currentTenantId || currentView !== VIEW_PENDING) return;
+  if (action !== 'authorize' && action !== 'reject') return;
+  if (!window.confirm(action === 'authorize' ? CONFIRM_AUTHORIZE : CONFIRM_REJECT)) return;
+
+  actionInFlight = true;
+  setMsg('', 'Enregistrement…');
+  renderTable();
+  try {
+    let result = null;
+    let failure = null;
+    try {
+      result = action === 'authorize'
+        ? await authorizeCandidate(currentTenantId, candidateId)
+        : await rejectCandidate(currentTenantId, candidateId);
+    } catch (err) {
+      failure = err;
+    }
+    if (!failure) {
+      // 200 DECIDED ou REPLAYED_SAME_DECISION : deux succès. Relecture D'ABORD,
+      // message ENSUITE (sinon la relecture effacerait le retour opérateur).
+      await loadCandidates();
+      setMsg('ok', successMessage(action, result));
+    } else {
+      const described = describeActionError(failure);
+      if (described.refetch) await loadCandidates();
+      setMsg('err', described.message);
+    }
+  } finally {
+    actionInFlight = false;
+    renderTable();
+  }
+}
+
+document.getElementById('candidatesBody').addEventListener('click', (e) => {
+  const target = e.target && e.target.closest ? e.target.closest('button[data-action]') : null;
+  if (!target || target.disabled) return;
+  handleAction(target.getAttribute('data-action'), target.getAttribute('data-candidate-id'));
+});
+document.getElementById('viewPendingBtn').addEventListener('click', () => switchView(VIEW_PENDING));
+document.getElementById('viewRejectedBtn').addEventListener('click', () => switchView(VIEW_REJECTED));
+document.getElementById('refreshBtn').addEventListener('click', () => { setMsg('', ''); loadCandidates(); });
+
+document.getElementById('loginBtn').addEventListener('click', tryLogin);
+document.getElementById('pwInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') tryLogin(); });
+
+async function tryLogin() {
+  const pw = document.getElementById('pwInput').value;
+  localStorage.setItem(PW_KEY, pw);
+  try {
+    await api('/api/admin/contacts');
+    showDashboard();
+  } catch (err) {
+    showGate(true);
+  }
+}
+
+(async function init() {
+  if (localStorage.getItem(PW_KEY)) {
+    try {
+      await api('/api/admin/contacts');
+      showDashboard();
+    } catch (err) {
+      showGate(false);
+    }
+  } else {
+    showGate(false);
+  }
+})();
+</script>
+</body>
+</html>

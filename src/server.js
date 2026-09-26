@@ -962,6 +962,103 @@ app.post('/api/admin/tenants/:id/domain-profile-selections', async (req, res) =>
   }
 });
 
+// --- H3-008D1Q36N4A-5D32 — Knowledge Acquisition Candidates (file de revue
+// opérateur + décisions humaines) : relais THIN vers les routes Go D30/D28
+//   GET  /admin/tenants/{id}/knowledge-acquisition-candidates
+//   POST /admin/tenants/{id}/knowledge-acquisition-candidates/{candidate_id}/authorize
+//   POST /admin/tenants/{id}/knowledge-acquisition-candidates/{candidate_id}/reject
+// Même identité que les autres relais admin (F0.2) : checkAdmin PUIS le
+// Bearer Pandore de l'UTILISATEUR, relayé tel quel — jamais un compte de
+// service, jamais x-internal-secret. Compose ne réinterprète ni ne décide
+// RIEN : il valide seulement que la requête respecte le contrat Go (fail
+// closed, jamais un paramètre silencieusement ignoré) puis relaie le statut
+// et le JSON de Go tels quels (502 uniquement si Go est injoignable).
+//
+// Contrat de requête (identique à Go D30/D28) :
+//   - GET : la SEULE clé de requête admise est `status`, au plus une fois,
+//     valeur EXACTE PENDING_REVIEW ou REJECTED (jamais CLOSED, jamais
+//     normalisée). Absente : rien n'est ajouté à l'URL Go (Go applique son
+//     défaut PENDING_REVIEW).
+//   - POST authorize/reject : AUCUN corps vers Go (D28 exige un corps
+//     strictement vide : ni `{}`, ni Content-Type JSON). Un corps entrant
+//     non vide est REFUSÉ (400), jamais retiré silencieusement.
+const CANDIDATE_QUEUE_STATUSES = new Set(['PENDING_REVIEW', 'REJECTED']);
+
+function candidateRelayValidationError(res, message) {
+  return res.status(400).json({ error: { code: 'VALIDATION_FAILED', message } });
+}
+
+// candidateQueueStatusFromRequest — { ok:false } si la requête sort du contrat ;
+// sinon { ok:true, status } (status === '' quand le paramètre est absent).
+function candidateQueueStatusFromRequest(req) {
+  const rawQuery = String(req.originalUrl || '').split('?')[1] || '';
+  const params = new URLSearchParams(rawQuery);
+  for (const key of params.keys()) {
+    if (key !== 'status') return { ok: false };
+  }
+  const values = params.getAll('status');
+  if (values.length === 0) return { ok: true, status: '' };
+  if (values.length !== 1 || !CANDIDATE_QUEUE_STATUSES.has(values[0])) return { ok: false };
+  return { ok: true, status: values[0] };
+}
+
+// requestHasBody — vrai dès qu'un corps est annoncé (Content-Length non nul
+// ou Transfer-Encoding), quel que soit son contenu : `{}` compte comme un
+// corps. express.json ne suffit pas (un corps `{}` donne le même req.body
+// qu'une absence de corps).
+function requestHasBody(req) {
+  const contentLength = req.get('content-length');
+  if (contentLength !== undefined && contentLength !== '0') return true;
+  return !!req.get('transfer-encoding');
+}
+
+app.get('/api/admin/tenants/:id/knowledge-acquisition-candidates', async (req, res) => {
+  if (!checkAdmin(req, res)) return;
+  const authorization = requirePandoreBearer(req, res);
+  if (!authorization) return;
+  const parsed = candidateQueueStatusFromRequest(req);
+  if (!parsed.ok) {
+    return candidateRelayValidationError(res, "seule la requête « status » (PENDING_REVIEW ou REJECTED), au plus une fois, est acceptée");
+  }
+  const query = parsed.status ? `?status=${parsed.status}` : '';
+  try {
+    const goRes = await fetch(`${PANDORE_API_BASE}/admin/tenants/${encodeURIComponent(req.params.id)}/knowledge-acquisition-candidates${query}`, {
+      headers: { Authorization: authorization },
+    });
+    const data = await goRes.json().catch(() => ({}));
+    res.status(goRes.status).json(data);
+  } catch (err) {
+    console.error('knowledge-acquisition-candidates GET proxy:', err.message);
+    res.status(502).json({ error: 'Lecture impossible pour le moment' });
+  }
+});
+
+function relayCandidateAction(action) {
+  return async (req, res) => {
+    if (!checkAdmin(req, res)) return;
+    const authorization = requirePandoreBearer(req, res);
+    if (!authorization) return;
+    if (requestHasBody(req)) {
+      return candidateRelayValidationError(res, 'cette action n\'accepte aucun corps de requête');
+    }
+    try {
+      // Aucun body, aucun Content-Type : uniquement le Bearer de l'utilisateur.
+      const goRes = await fetch(`${PANDORE_API_BASE}/admin/tenants/${encodeURIComponent(req.params.id)}/knowledge-acquisition-candidates/${encodeURIComponent(req.params.candidate_id)}/${action}`, {
+        method: 'POST',
+        headers: { Authorization: authorization },
+      });
+      const data = await goRes.json().catch(() => ({}));
+      res.status(goRes.status).json(data);
+    } catch (err) {
+      console.error(`knowledge-acquisition-candidates ${action} proxy:`, err.message);
+      res.status(502).json({ error: 'Décision impossible pour le moment' });
+    }
+  };
+}
+
+app.post('/api/admin/tenants/:id/knowledge-acquisition-candidates/:candidate_id/authorize', relayCandidateAction('authorize'));
+app.post('/api/admin/tenants/:id/knowledge-acquisition-candidates/:candidate_id/reject', relayCandidateAction('reject'));
+
 // --- H3-008D1K — Platform Integration Configuration (Niveau A) : relais
 // THIN GÉNÉRIQUE vers GET/PUT /admin/platform-integrations[/:platform]
 // (Go, H3-008D1G/H3-008D1I, déjà génériques et schema-driven — aucun champ
