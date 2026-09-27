@@ -21,6 +21,11 @@
   textarea { width: 100%; min-height: 80px; background: #0F1216; color: var(--text); border: 1px solid var(--border); border-radius: 10px; padding: 12px; font-family: inherit; font-size: 14px; resize: vertical; }
   .req { color: var(--bad); font-size: 12px; margin-top: 6px; display: none; }
   .req.show { display: block; }
+  .unknown-opt { display: flex; align-items: center; gap: 8px; margin: 12px 0 0; font-weight: 500; font-size: 14px; color: var(--mute); cursor: pointer; }
+  .unknown-opt input { width: 18px; height: 18px; accent-color: var(--accent); }
+  textarea:disabled { opacity: 0.45; cursor: not-allowed; }
+  .form-error { color: var(--bad); font-size: 14px; margin-top: 16px; display: none; }
+  .form-error.show { display: block; }
   .actions { margin-top: 24px; }
   button { font-family: inherit; font-size: 14px; font-weight: 600; padding: 12px 20px; border-radius: 10px; border: 1px solid var(--accent); cursor: pointer; background: var(--surface); color: var(--accent); }
   button:hover { filter: brightness(1.15); }
@@ -37,92 +42,217 @@ function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&
 const token = new URLSearchParams(location.search).get('token');
 const app = document.getElementById('app');
 
+// --- Contrat backend (Go, public clarification view) ------------------------------------
+// GET  /api/public/clarifications/:token  ->
+//   { status, expires_at, questions: [ { ref, prompt, allowed_states?: ['ANSWERED_WITH_VALUE'[, 'UNKNOWN']] } ] }
+//   `allowed_states` n'est présent que pour une demande PENDING ; 'UNKNOWN' n'est annoncé que pour une
+//   question de connaissance. Absent/vide = réponse « texte seul » historique (aucun état envoyé).
+// POST /api/public/clarifications/:token/response ->
+//   { answers: [ { question_ref, state?, text? } ] }, UNE entrée par question :
+//     - valeur      : { question_ref, state: 'ANSWERED_WITH_VALUE', text: <valeur non vide> }
+//     - je ne sais pas : { question_ref, state: 'UNKNOWN' }   (AUCUN texte)
+//     - texte seul historique (pas d'allowed_states) : { question_ref, text }
+// La page suit ce contrat pour N'IMPORTE QUELLE question : rien ne dépend de la clé métier, de l'origine
+// ni d'un client ; un état que le backend n'annonce pas n'est jamais proposé ni envoyé.
+const STATE_VALUE = 'ANSWERED_WITH_VALUE';
+const STATE_UNKNOWN = 'UNKNOWN';
+
+const MSG_LINK_GONE = "Ce lien n'est plus valide.";
+const MSG_LINK_INVALID = 'Ce lien est invalide ou a expiré.';
+const MSG_LOAD_ERROR = 'Erreur de chargement — réessayez dans un instant.';
+const MSG_SUCCESS = '✓ Merci, vos réponses ont bien été enregistrées. Vous pouvez fermer cette page.';
+const MSG_NOT_PENDING = "Ces réponses ne peuvent plus être enregistrées : ce lien a déjà été utilisé ou n'est plus valide.";
+const MSG_VALIDATION = "Votre réponse n'a pas pu être enregistrée. Vérifiez-la, puis envoyez à nouveau le formulaire.";
+const MSG_CONFLICT = 'Une information équivalente est déjà enregistrée pour cette question.';
+const MSG_RATE_LIMITED = 'Trop de tentatives. Patientez quelques minutes, puis envoyez à nouveau le formulaire.';
+const MSG_SUBMIT_ERROR = "Erreur lors de l'enregistrement — vous pouvez envoyer à nouveau le formulaire.";
+const MSG_UNSUPPORTED = "Ce formulaire ne peut pas être affiché correctement. Merci de contacter l'équipe.";
+const MSG_NEED_ANSWER = 'Une réponse est requise.';
+const MSG_NEED_ANSWER_OR_UNKNOWN = 'Écrivez votre réponse ou cochez « Je ne sais pas ».';
+const MSG_NEED_UNKNOWN = 'Cochez « Je ne sais pas » pour répondre à cette question.';
+
+let questions = [];      // modèle des questions affichées : source de vérité du payload (jamais le DOM)
+let submitting = false;  // une seule requête POST en vol : posé de façon synchrone avant tout await
+let finished = false;    // succès ou état final : plus aucune soumission possible depuis cette page
+
+// Capacités d'une question, déduites UNIQUEMENT des métadonnées du backend.
+function capabilitiesOf(q){
+  const states = Array.isArray(q.allowed_states) ? q.allowed_states.filter(s => typeof s === 'string') : [];
+  if (states.length === 0){
+    return { structured: false, canValue: true, canUnknown: false, supported: true };
+  }
+  const canValue = states.includes(STATE_VALUE);
+  const canUnknown = states.includes(STATE_UNKNOWN);
+  return { structured: true, canValue, canUnknown, supported: canValue || canUnknown };
+}
+
+function setFinal(html){
+  finished = true;
+  app.innerHTML = html;
+}
+
 function renderQuestions(data){
+  questions = data.questions.map(q => Object.assign({ ref: q.ref, prompt: q.prompt }, capabilitiesOf(q)));
+  if (questions.some(q => !q.supported)){
+    setFinal(`<div class="state error">${esc(MSG_UNSUPPORTED)}</div>`);
+    return;
+  }
+  const anyUnknown = questions.some(q => q.canUnknown);
+  const intro = anyUnknown
+    ? 'Pour préparer votre accompagnement au mieux, merci de répondre aux questions ci-dessous. Si vous ne connaissez pas une réponse, cochez « Je ne sais pas » plutôt que de l\'écrire.'
+    : 'Pour préparer votre accompagnement au mieux, merci de répondre aux questions ci-dessous. Si une question ne vous concerne pas ou que vous ne connaissez pas la réponse, indiquez-le simplement ("je ne sais pas").';
   app.innerHTML = `
     <div class="eyebrow">La Boîte de Pandore</div>
     <h1>Quelques précisions nécessaires</h1>
-    <div class="intro">Pour préparer votre accompagnement au mieux, merci de répondre aux questions ci-dessous. Si une question ne vous concerne pas ou que vous ne connaissez pas la réponse, indiquez-le simplement ("je ne sais pas").</div>
-    ${data.questions.map((q, i) => `
+    <div class="intro">${esc(intro)}</div>
+    ${questions.map((q, i) => `
       <div class="question">
-        <label for="answer-${i}">${esc(q.prompt)}</label>
-        <textarea id="answer-${i}" data-ref="${esc(q.ref)}"></textarea>
-        <div class="req" id="req-${i}">Une réponse est requise (vous pouvez écrire "je ne sais pas").</div>
+        ${q.canValue
+          ? `<label for="answer-${i}">${esc(q.prompt)}</label><textarea id="answer-${i}"></textarea>`
+          : `<div class="qtext" style="font-weight:600;margin-bottom:10px;line-height:1.5;">${esc(q.prompt)}</div>`}
+        ${q.canUnknown ? `<label class="unknown-opt" for="unknown-${i}"><input type="checkbox" id="unknown-${i}"> Je ne sais pas</label>` : ''}
+        <div class="req" id="req-${i}" role="alert"></div>
       </div>
     `).join('')}
-    <div class="actions"><button id="submit-btn">Envoyer mes réponses</button></div>
+    <div class="form-error" id="form-error" role="alert" aria-live="polite"></div>
+    <div class="actions"><button id="submit-btn" type="button">Envoyer mes réponses</button></div>
   `;
-  document.getElementById('submit-btn').addEventListener('click', () => submit(data.questions.length));
+  questions.forEach((q, i) => {
+    if (!q.canUnknown) return;
+    const box = document.getElementById(`unknown-${i}`);
+    box.addEventListener('change', () => {
+      const field = document.getElementById(`answer-${i}`);
+      // « Je ne sais pas » est une décision explicite : elle remplace la valeur (le champ est désactivé,
+      // jamais envoyé avec UNKNOWN).
+      if (field) field.disabled = !!box.checked;
+      document.getElementById(`req-${i}`).classList.remove('show');
+    });
+  });
+  document.getElementById('submit-btn').addEventListener('click', submit);
 }
 
-async function submit(count){
-  const btn = document.getElementById('submit-btn');
+function showFormError(msg){
+  const el = document.getElementById('form-error');
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.add('show');
+}
+function clearFormError(){
+  const el = document.getElementById('form-error');
+  if (!el) return;
+  el.textContent = '';
+  el.classList.remove('show');
+}
+
+// buildAnswers — transforme la saisie en payload, à partir du modèle `questions` uniquement.
+// Retourne { ok:false } (aucune requête) tant qu'une question n'a ni valeur ni « Je ne sais pas » explicite.
+function buildAnswers(){
   const answers = [];
   let ok = true;
-  for (let i = 0; i < count; i++){
-    const field = document.getElementById(`answer-${i}`);
-    const text = field.value.trim();
+  questions.forEach((q, i) => {
     const reqEl = document.getElementById(`req-${i}`);
-    if (!text){
-      reqEl.classList.add('show');
-      ok = false;
-    } else {
+    const box = q.canUnknown ? document.getElementById(`unknown-${i}`) : null;
+    const field = q.canValue ? document.getElementById(`answer-${i}`) : null;
+    const unknownChosen = !!(box && box.checked);
+    if (unknownChosen){
       reqEl.classList.remove('show');
-      answers.push({ question_ref: field.dataset.ref, text });
-    }
-  }
-  if (!ok) return;
-
-  btn.disabled = true;
-  btn.textContent = 'Envoi...';
-  try{
-    const res = await fetch(`/api/public/clarifications/${encodeURIComponent(token)}/response`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ answers }),
-    });
-    if (res.ok){
-      app.innerHTML = '<div class="state ok">✓ Merci, vos réponses ont bien été enregistrées. Vous pouvez fermer cette page.</div>';
-      if (window.history && window.history.replaceState){
-        window.history.replaceState({}, document.title, location.pathname);
-      }
+      answers.push({ question_ref: q.ref, state: STATE_UNKNOWN });
       return;
     }
-    const data = await res.json().catch(() => ({}));
-    const msg = (data.error && data.error.message) || 'Erreur lors de l\'enregistrement.';
-    app.innerHTML = `<div class="state error">${esc(msg)}</div>`;
+    const text = field ? String(field.value == null ? '' : field.value).trim() : '';
+    if (q.canValue && text){
+      reqEl.classList.remove('show');
+      answers.push(q.structured ? { question_ref: q.ref, state: STATE_VALUE, text } : { question_ref: q.ref, text });
+      return;
+    }
+    // Ni valeur, ni « Je ne sais pas » : jamais de requête, jamais d'état déduit d'un champ vide.
+    reqEl.textContent = q.canValue ? (q.canUnknown ? MSG_NEED_ANSWER_OR_UNKNOWN : MSG_NEED_ANSWER) : MSG_NEED_UNKNOWN;
+    reqEl.classList.add('show');
+    ok = false;
+  });
+  return ok ? { ok: true, answers } : { ok: false };
+}
+
+async function submit(){
+  if (submitting || finished) return;
+  const built = buildAnswers();
+  if (!built.ok) return;
+
+  submitting = true;                       // synchrone : un second clic ne peut pas passer
+  const btn = document.getElementById('submit-btn');
+  btn.disabled = true;
+  btn.textContent = 'Envoi...';
+  clearFormError();
+
+  const restore = () => { submitting = false; btn.disabled = false; btn.textContent = 'Envoyer mes réponses'; };
+
+  let res;
+  try{
+    // UNE tentative utilisateur = UNE requête réseau : aucun retry automatique.
+    res = await fetch(`/api/public/clarifications/${encodeURIComponent(token)}/response`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ answers: built.answers }),
+    });
   }catch(err){
-    app.innerHTML = '<div class="state error">Erreur réseau — réessayez dans un instant.</div>';
+    restore();
+    showFormError(MSG_SUBMIT_ERROR);
+    return;
   }
+
+  if (res.ok){
+    setFinal(`<div class="state ok">${esc(MSG_SUCCESS)}</div>`);
+    if (window.history && window.history.replaceState){
+      window.history.replaceState({}, document.title, location.pathname);
+    }
+    return;
+  }
+  const data = await res.json().catch(() => ({}));
+  const code = data && data.error && typeof data.error === 'object' ? data.error.code : undefined;
+  // Branchement sur le statut/code uniquement : aucun texte backend n'est jamais affiché.
+  if (res.status === 410){ setFinal(`<div class="state error">${esc(MSG_LINK_GONE)}</div>`); return; }
+  if (res.status === 404){ setFinal(`<div class="state error">${esc(MSG_LINK_INVALID)}</div>`); return; }
+  if (res.status === 422 && code === 'REQUEST_NOT_PENDING'){ setFinal(`<div class="state error">${esc(MSG_NOT_PENDING)}</div>`); return; }
+  restore();
+  if (res.status === 422) showFormError(MSG_VALIDATION);
+  else if (res.status === 409) showFormError(MSG_CONFLICT);
+  else if (res.status === 429) showFormError(MSG_RATE_LIMITED);
+  else showFormError(MSG_SUBMIT_ERROR);
 }
 
 async function load(){
   if (!token){
-    app.innerHTML = '<div class="state error">Aucun lien valide fourni.</div>';
+    setFinal('<div class="state error">Aucun lien valide fourni.</div>');
     return;
   }
   try{
     const res = await fetch(`/api/public/clarifications/${encodeURIComponent(token)}`);
+    if (res.status === 410){
+      // Lien expiré ou remplacé : état FINAL, jamais une invitation à réessayer.
+      setFinal(`<div class="state error">${esc(MSG_LINK_GONE)}</div>`);
+      return;
+    }
     if (res.status === 404){
-      app.innerHTML = '<div class="state error">Ce lien est invalide ou a expiré.</div>';
+      setFinal(`<div class="state error">${esc(MSG_LINK_INVALID)}</div>`);
       return;
     }
     if (!res.ok) throw new Error('load_failed');
     const data = await res.json();
     if (data.status === 'ANSWERED'){
-      app.innerHTML = '<div class="state">Vous avez déjà répondu à ces questions. Merci.</div>';
+      setFinal('<div class="state">Vous avez déjà répondu à ces questions. Merci.</div>');
       return;
     }
     if (data.status === 'EXPIRED'){
-      app.innerHTML = '<div class="state error">Ce lien a expiré.</div>';
+      setFinal(`<div class="state error">${esc(MSG_LINK_GONE)}</div>`);
       return;
     }
     if (data.status !== 'PENDING' || !data.questions || !data.questions.length){
-      app.innerHTML = '<div class="state error">Ce lien n\'est plus disponible.</div>';
+      setFinal('<div class="state error">Ce lien n\'est plus disponible.</div>');
       return;
     }
     renderQuestions(data);
   }catch(err){
-    app.innerHTML = '<div class="state error">Erreur de chargement — réessayez dans un instant.</div>';
+    app.innerHTML = `<div class="state error">${esc(MSG_LOAD_ERROR)}</div>`;
   }
 }
 load();
