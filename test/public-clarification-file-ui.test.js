@@ -329,6 +329,34 @@ async function test(name, fn) {
     }
   });
 
+  // N23 (H3-008D1Q36N4A5D66NEG1) — après une erreur fichier (upload OU preview OU confirm), le clic
+  // global « Envoyer mes réponses » ne doit jamais soumettre accidentellement un TEXT/UNKNOWN pour
+  // CETTE question : elle reste exigée (requiert une réponse ou un nouveau fichier), jamais traitée
+  // comme vide/skippable, jamais source d'un POST /response forgé à partir d'un état d'erreur.
+  await test('N23. after a file error (upload/preview/confirm), the global submit never fires a stray TEXT/UNKNOWN payload for that question', async () => {
+    const scenarios = [
+      { label: 'upload error', opts: { get: { status: 200, body: view([fileQuestion(REF, { allowedStates: ['ANSWERED_WITH_VALUE', 'UNKNOWN'] })]) }, upload: { status: 422, body: { error: { code: 'NO_VALID_ITEM' } } } } },
+      { label: 'preview error', opts: { get: { status: 200, body: view([fileQuestion(REF, { allowedStates: ['ANSWERED_WITH_VALUE', 'UNKNOWN'] })]) }, previewThrows: true } },
+      { label: 'confirm error', opts: { get: { status: 200, body: view([fileQuestion(REF, { allowedStates: ['ANSWERED_WITH_VALUE', 'UNKNOWN'] })]) }, confirm: { status: 409, body: { error: { code: 'CONFLICT' } } } } },
+    ];
+    for (const { label, opts } of scenarios) {
+      const env = await makeEnv(opts);
+      env.selectFile(0, env.fakeFile('terms.txt'));
+      env.clickUpload(0);
+      await settle();
+      if (env.el('file-confirm-btn-0') && env.el('file-confirm-btn-0').listeners.click && !env.el('file-confirm-btn-0').disabled) {
+        env.clickConfirm(0);
+        await settle();
+      }
+      // Aucune valeur TEXT/UNKNOWN n'a été saisie par ailleurs : si le submit global partait quand
+      // même, ce ne pourrait être qu'en traitant la question FILE-en-échec comme "vide donc ignorée"
+      // (silencieusement skippée) ou comme UNKNOWN fabriqué — les deux sont interdits.
+      env.el('submit-btn').listeners.click();
+      await settle();
+      assert.strictEqual(env.textPosts().length, 0, `${label}: aucun POST /response ne doit partir pour une question FILE en échec sans réponse TEXT/UNKNOWN explicite`);
+    }
+  });
+
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);
 })();
