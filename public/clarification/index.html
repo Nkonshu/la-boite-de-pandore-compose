@@ -33,6 +33,26 @@
   .state { text-align: center; padding: 100px 24px; color: var(--mute); }
   .state.error { color: var(--bad); }
   .state.ok { color: var(--good); }
+
+  /* --- fichier (H3-008D1Q36N4A5D66UI1) --- */
+  .file-block { margin-top: 16px; padding-top: 16px; border-top: 1px dashed var(--border); }
+  .file-or { color: var(--mute); font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin: 14px 0 10px; }
+  .file-hint { color: var(--mute); font-size: 12px; margin: 6px 0 10px; line-height: 1.5; }
+  .file-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  input[type="file"] { color: var(--text); font-size: 13px; max-width: 100%; }
+  input[type="file"]:disabled { opacity: 0.45; cursor: not-allowed; }
+  .file-status { font-size: 13px; margin-top: 10px; min-height: 1.4em; word-break: break-word; }
+  .file-status.err { color: var(--bad); }
+  .file-status.ok { color: var(--good); }
+  .file-status.busy { color: var(--mute); }
+  .preview-box { margin-top: 12px; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .preview-summary { padding: 10px 12px; font-size: 13px; color: var(--mute); background: #0F1216; }
+  .preview-list { max-height: 220px; overflow-y: auto; font-size: 13px; }
+  .preview-list div { padding: 6px 12px; border-top: 1px solid var(--border); word-break: break-word; }
+  .preview-list div:first-child { border-top: none; }
+  .preview-warnings { padding: 8px 12px; font-size: 12px; color: var(--accent); background: #0F1216; border-top: 1px solid var(--border); }
+  .file-done { color: var(--good); font-size: 14px; font-weight: 600; margin-top: 10px; }
+  .btn-secondary { background: transparent; }
 </style>
 </head>
 <body>
@@ -44,18 +64,29 @@ const app = document.getElementById('app');
 
 // --- Contrat backend (Go, public clarification view) ------------------------------------
 // GET  /api/public/clarifications/:token  ->
-//   { status, expires_at, questions: [ { ref, prompt, allowed_states?: ['ANSWERED_WITH_VALUE'[, 'UNKNOWN']] } ] }
-//   `allowed_states` n'est présent que pour une demande PENDING ; 'UNKNOWN' n'est annoncé que pour une
-//   question de connaissance. Absent/vide = réponse « texte seul » historique (aucun état envoyé).
+//   { status, expires_at, questions: [ { ref, prompt,
+//       allowed_states?: ['ANSWERED_WITH_VALUE'[, 'UNKNOWN']],
+//       allowed_response_modes?: ['TEXT'[, 'FILE']],
+//       file_upload?: { allowed_formats: ['CSV'|'TXT'|'XLSX', ...], max_bytes, max_files } } ] }
+//   `allowed_states`/`allowed_response_modes`/`file_upload` ne sont présents que pour une demande
+//   PENDING. Absent/vide `allowed_response_modes` = réponse « texte seul » historique (comportement
+//   inchangé). `file_upload` n'est présent QUE si `allowed_response_modes` contient 'FILE'.
 // POST /api/public/clarifications/:token/response ->
-//   { answers: [ { question_ref, state?, text? } ] }, UNE entrée par question :
-//     - valeur      : { question_ref, state: 'ANSWERED_WITH_VALUE', text: <valeur non vide> }
-//     - je ne sais pas : { question_ref, state: 'UNKNOWN' }   (AUCUN texte)
-//     - texte seul historique (pas d'allowed_states) : { question_ref, text }
+//   { answers: [ { question_ref, state?, text? } ] }  (INCHANGÉ — voir la fonction submit ci-dessous)
+// POST /api/public/clarifications/:token/questions/:questionRef/file  (multipart, champ "file") ->
+//   201 { file_answer: { id, filename, size, format, status } }
+// POST /api/public/clarifications/:token/questions/:questionRef/file/preview ->
+//   201 { preview: { file_answer_id, extraction_id, filename, format, parser_id, parser_version,
+//     sheets?, total_rows, total_columns, preview_rows: [ { row, sheet?, cells: [] } ],
+//     truncated, warnings?, confirmable, candidate_count, validation_code? } }
+// POST /api/public/clarifications/:token/questions/:questionRef/file/confirm  { artifact_extraction_id } ->
+//   200 { confirmation: { clarification_status, question_ref, question_answer_state, file_answer_id,
+//     extraction_id, candidate_count, accepted_count, requirement_key, requirement_resolution } }
 // La page suit ce contrat pour N'IMPORTE QUELLE question : rien ne dépend de la clé métier, de l'origine
-// ni d'un client ; un état que le backend n'annonce pas n'est jamais proposé ni envoyé.
+// ni d'un client ; un état/mode que le backend n'annonce pas n'est jamais proposé ni envoyé.
 const STATE_VALUE = 'ANSWERED_WITH_VALUE';
 const STATE_UNKNOWN = 'UNKNOWN';
+const MODE_FILE = 'FILE';
 
 const MSG_LINK_GONE = "Ce lien n'est plus valide.";
 const MSG_LINK_INVALID = 'Ce lien est invalide ou a expiré.';
@@ -70,20 +101,60 @@ const MSG_UNSUPPORTED = "Ce formulaire ne peut pas être affiché correctement. 
 const MSG_NEED_ANSWER = 'Une réponse est requise.';
 const MSG_NEED_ANSWER_OR_UNKNOWN = 'Écrivez votre réponse ou cochez « Je ne sais pas ».';
 const MSG_NEED_UNKNOWN = 'Cochez « Je ne sais pas » pour répondre à cette question.';
+const MSG_FILE_TOO_LARGE = 'Ce fichier est trop volumineux pour cette question.';
+const MSG_FILE_UPLOAD_ERROR = "Le fichier n'a pas pu être envoyé. Vous pouvez réessayer.";
+const MSG_FILE_PREVIEW_ERROR = "Le contenu du fichier n'a pas pu être analysé. Vous pouvez réessayer avec un autre fichier.";
+const MSG_FILE_CONFIRM_ERROR = "La confirmation a échoué. Vous pouvez réessayer.";
+const MSG_FILE_DONE = '✓ Fichier enregistré pour cette question.';
+
+// Traduction des codes de validation/erreur backend (jamais un texte brut du backend affiché).
+const FILE_ERROR_MESSAGES = {
+  AMBIGUOUS_MULTI_COLUMN: 'Ce fichier contient plusieurs colonnes remplies : utilisez une seule colonne avec vos valeurs.',
+  AMBIGUOUS_MULTI_SHEET: 'Ce fichier contient des valeurs sur plusieurs feuilles : regroupez-les sur une seule feuille.',
+  UNSUPPORTED_LOCATOR: 'Le contenu de ce fichier ne peut pas être analysé automatiquement.',
+  DUPLICATE_VALUE: 'Ce fichier contient une valeur en double, ou déjà enregistrée. Corrigez-le puis réessayez.',
+  NO_VALID_ITEM: "Aucune valeur exploitable n'a été trouvée dans ce fichier.",
+  EXTRACTION_ARTIFACT_MISMATCH: 'Ce fichier a changé entre temps — merci de relancer la vérification.',
+  TRUNCATED: 'Ce fichier est trop volumineux et a été tronqué : il ne peut pas être confirmé tel quel.',
+  MULTIPLE_VALUES_FOR_SINGLE: 'Ce fichier contient plusieurs valeurs alors qu\'une seule est attendue.',
+  CONFLICT: 'Une information équivalente existe déjà pour cette question.',
+};
 
 let questions = [];      // modèle des questions affichées : source de vérité du payload (jamais le DOM)
-let submitting = false;  // une seule requête POST en vol : posé de façon synchrone avant tout await
+let fileStates = [];     // état fichier runtime par question (parallèle à `questions`, jamais dans le DOM)
+let submitting = false;  // une seule requête POST globale en vol : posé de façon synchrone avant tout await
 let finished = false;    // succès ou état final : plus aucune soumission possible depuis cette page
+
+function freshFileState(){
+  return {
+    file: null, uploadStatus: 'idle', fileAnswerId: null,
+    previewStatus: 'idle', extractionId: null, candidateCount: 0, totalRows: 0,
+    previewRows: [], warnings: [], truncated: false, confirmable: false, validationCode: '',
+    confirmStatus: 'idle', resolved: false,
+  };
+}
 
 // Capacités d'une question, déduites UNIQUEMENT des métadonnées du backend.
 function capabilitiesOf(q){
   const states = Array.isArray(q.allowed_states) ? q.allowed_states.filter(s => typeof s === 'string') : [];
+  const modes = Array.isArray(q.allowed_response_modes) ? q.allowed_response_modes.filter(m => typeof m === 'string') : [];
+  const canFile = modes.includes(MODE_FILE);
+  const fileUpload = canFile && q.file_upload && typeof q.file_upload === 'object'
+    ? {
+        allowedFormats: Array.isArray(q.file_upload.allowed_formats) ? q.file_upload.allowed_formats.filter(f => typeof f === 'string') : [],
+        maxBytes: typeof q.file_upload.max_bytes === 'number' ? q.file_upload.max_bytes : 0,
+        maxFiles: typeof q.file_upload.max_files === 'number' ? q.file_upload.max_files : 0,
+      }
+    : null;
   if (states.length === 0){
-    return { structured: false, canValue: true, canUnknown: false, supported: true };
+    // Comportement historique inchangé : aucun allowed_states -> texte seul, jamais de FILE
+    // (un contrat historique n'annonce jamais allowed_response_modes non plus en pratique, mais la
+    // page ne rend FILE QUE si modes l'annonce explicitement, jamais déduit d'autre chose).
+    return { structured: false, canValue: true, canUnknown: false, canFile, fileUpload, supported: true };
   }
   const canValue = states.includes(STATE_VALUE);
   const canUnknown = states.includes(STATE_UNKNOWN);
-  return { structured: true, canValue, canUnknown, supported: canValue || canUnknown };
+  return { structured: true, canValue, canUnknown, canFile, fileUpload, supported: canValue || canUnknown || canFile };
 }
 
 function setFinal(html){
@@ -91,8 +162,29 @@ function setFinal(html){
   app.innerHTML = html;
 }
 
+function formatBytes(n){
+  if (!n || n <= 0) return '';
+  if (n >= 1024 * 1024) return (n / (1024 * 1024)).toFixed(1).replace(/\.0$/, '') + ' Mo';
+  return Math.round(n / 1024) + ' Ko';
+}
+
+function fileAcceptAttr(fu){
+  if (!fu || !fu.allowedFormats.length) return '';
+  return fu.allowedFormats.map(f => '.' + String(f).toLowerCase()).join(',');
+}
+
+function fileHintText(fu){
+  if (!fu) return '';
+  const parts = [];
+  if (fu.allowedFormats.length) parts.push('formats acceptés : ' + fu.allowedFormats.join(', '));
+  if (fu.maxBytes > 0) parts.push('taille maximale : ' + formatBytes(fu.maxBytes));
+  if (fu.maxFiles > 0) parts.push(fu.maxFiles === 1 ? '1 fichier' : fu.maxFiles + ' fichiers maximum');
+  return parts.join(' • ');
+}
+
 function renderQuestions(data){
   questions = data.questions.map(q => Object.assign({ ref: q.ref, prompt: q.prompt }, capabilitiesOf(q)));
+  fileStates = questions.map(() => freshFileState());
   if (questions.some(q => !q.supported)){
     setFinal(`<div class="state error">${esc(MSG_UNSUPPORTED)}</div>`);
     return;
@@ -106,11 +198,23 @@ function renderQuestions(data){
     <h1>Quelques précisions nécessaires</h1>
     <div class="intro">${esc(intro)}</div>
     ${questions.map((q, i) => `
-      <div class="question">
+      <div class="question" id="qcard-${i}">
         ${q.canValue
           ? `<label for="answer-${i}">${esc(q.prompt)}</label><textarea id="answer-${i}"></textarea>`
           : `<div class="qtext" style="font-weight:600;margin-bottom:10px;line-height:1.5;">${esc(q.prompt)}</div>`}
         ${q.canUnknown ? `<label class="unknown-opt" for="unknown-${i}"><input type="checkbox" id="unknown-${i}"> Je ne sais pas</label>` : ''}
+        ${q.canFile ? `
+          ${q.canValue || q.canUnknown ? '<div class="file-or">ou</div>' : ''}
+          <div class="file-block" id="fileblock-${i}">
+            <div class="file-hint">${esc(fileHintText(q.fileUpload))}</div>
+            <div class="file-row">
+              <input type="file" id="file-${i}" accept="${esc(fileAcceptAttr(q.fileUpload))}">
+              <button type="button" class="btn-secondary" id="file-upload-btn-${i}" disabled>Envoyer ce fichier</button>
+            </div>
+            <div class="file-status" id="file-status-${i}" role="status" aria-live="polite"></div>
+            <div id="preview-${i}"></div>
+          </div>
+        ` : ''}
         <div class="req" id="req-${i}" role="alert"></div>
       </div>
     `).join('')}
@@ -118,17 +222,286 @@ function renderQuestions(data){
     <div class="actions"><button id="submit-btn" type="button">Envoyer mes réponses</button></div>
   `;
   questions.forEach((q, i) => {
-    if (!q.canUnknown) return;
-    const box = document.getElementById(`unknown-${i}`);
-    box.addEventListener('change', () => {
+    if (q.canUnknown){
+      const box = document.getElementById(`unknown-${i}`);
+      box.addEventListener('change', () => {
+        if (box.checked) applyMode(i, 'unknown');
+        else { document.getElementById(`req-${i}`).classList.remove('show'); }
+        const field = document.getElementById(`answer-${i}`);
+        if (field) field.disabled = !!box.checked;
+      });
+    }
+    if (q.canValue){
       const field = document.getElementById(`answer-${i}`);
-      // « Je ne sais pas » est une décision explicite : elle remplace la valeur (le champ est désactivé,
-      // jamais envoyé avec UNKNOWN).
-      if (field) field.disabled = !!box.checked;
-      document.getElementById(`req-${i}`).classList.remove('show');
-    });
+      field.addEventListener('input', () => {
+        document.getElementById(`req-${i}`).classList.remove('show');
+        if (String(field.value || '').trim() !== '') applyMode(i, 'text');
+        else releaseMode(i, 'text');
+      });
+    }
+    if (q.canFile){
+      const input = document.getElementById(`file-${i}`);
+      const uploadBtn = document.getElementById(`file-upload-btn-${i}`);
+      input.addEventListener('change', () => onFileSelected(i));
+      uploadBtn.addEventListener('click', () => uploadFile(i));
+    }
   });
   document.getElementById('submit-btn').addEventListener('click', submit);
+}
+
+// applyMode / releaseMode — exclusivité des modes (H3-008D1Q36N4A5D66UI1 §5) : TEXT, FILE et UNKNOWN
+// sont mutuellement exclusifs PAR QUESTION. Choisir l'un neutralise visuellement et fonctionnellement
+// les deux autres (désactivés, jamais envoyés). `releaseMode` ne fait rien si un AUTRE mode est déjà
+// actif (ex. vider le texte ne doit jamais interrompre un fichier déjà en cours de confirmation).
+function activeModeOf(i){
+  const fs = fileStates[i];
+  if (fs && (fs.file || fs.uploadStatus !== 'idle' || fs.confirmStatus !== 'idle')) return 'file';
+  const box = q(i).canUnknown ? document.getElementById(`unknown-${i}`) : null;
+  if (box && box.checked) return 'unknown';
+  const field = q(i).canValue ? document.getElementById(`answer-${i}`) : null;
+  if (field && String(field.value || '').trim() !== '') return 'text';
+  return 'none';
+}
+function q(i){ return questions[i]; }
+
+function applyMode(i, mode){
+  const qq = q(i);
+  const field = qq.canValue ? document.getElementById(`answer-${i}`) : null;
+  const box = qq.canUnknown ? document.getElementById(`unknown-${i}`) : null;
+  const fileInput = qq.canFile ? document.getElementById(`file-${i}`) : null;
+  const uploadBtn = qq.canFile ? document.getElementById(`file-upload-btn-${i}`) : null;
+  if (mode === 'text'){
+    if (box){ box.checked = false; box.disabled = true; }
+    if (field) field.disabled = false;
+    if (fileInput){ fileInput.disabled = true; if (uploadBtn) uploadBtn.disabled = true; }
+  } else if (mode === 'unknown'){
+    if (field){ field.value = ''; field.disabled = true; }
+    if (fileInput){ fileInput.disabled = true; if (uploadBtn) uploadBtn.disabled = true; }
+  } else if (mode === 'file'){
+    if (field){ field.disabled = true; }
+    if (box){ box.checked = false; box.disabled = true; }
+  }
+}
+function releaseMode(i, fromMode){
+  const current = activeModeOf(i);
+  if (current !== 'none' && current !== fromMode) return; // un autre mode est actif : ne rien relâcher
+  const qq = q(i);
+  const field = qq.canValue ? document.getElementById(`answer-${i}`) : null;
+  const box = qq.canUnknown ? document.getElementById(`unknown-${i}`) : null;
+  const fileInput = qq.canFile ? document.getElementById(`file-${i}`) : null;
+  if (field) field.disabled = false;
+  if (box) box.disabled = false;
+  if (fileInput) fileInput.disabled = false;
+}
+
+// --- Fichier : sélection / upload / preview / confirm --------------------------------------
+
+function fileStatusEl(i){ return document.getElementById(`file-status-${i}`); }
+function setFileStatus(i, cls, text){
+  const el = fileStatusEl(i);
+  if (!el) return;
+  el.classList.remove('err'); el.classList.remove('ok'); el.classList.remove('busy');
+  if (cls) el.classList.add(cls);
+  el.textContent = text || '';
+}
+
+function resetFilePreview(i){
+  const el = document.getElementById(`preview-${i}`);
+  if (el) el.innerHTML = '';
+  const fs = fileStates[i];
+  fs.previewStatus = 'idle'; fs.extractionId = null; fs.candidateCount = 0; fs.totalRows = 0;
+  fs.previewRows = []; fs.warnings = []; fs.truncated = false; fs.confirmable = false; fs.validationCode = '';
+}
+
+// Sélection/ré-sélection d'un fichier : invalide TOUJOURS l'extraction précédente (H3-008D1Q36N4A5D66UI1 §11).
+function onFileSelected(i){
+  const input = document.getElementById(`file-${i}`);
+  const uploadBtn = document.getElementById(`file-upload-btn-${i}`);
+  const file = input.files && input.files[0] ? input.files[0] : null;
+  const fs = fileStates[i];
+  fs.file = file;
+  fs.uploadStatus = 'idle';
+  fs.fileAnswerId = null;
+  resetFilePreview(i);
+  if (!file){
+    uploadBtn.disabled = true;
+    setFileStatus(i, '', '');
+    releaseMode(i, 'file');
+    return;
+  }
+  const qq = q(i);
+  const maxBytes = qq.fileUpload ? qq.fileUpload.maxBytes : 0;
+  if (maxBytes > 0 && file.size > maxBytes){
+    uploadBtn.disabled = true;
+    setFileStatus(i, 'err', MSG_FILE_TOO_LARGE);
+    return; // jamais d'upload : validation frontend avant tout appel réseau (le backend reste l'autorité finale)
+  }
+  uploadBtn.disabled = false;
+  setFileStatus(i, '', '');
+  applyMode(i, 'file');
+  document.getElementById(`req-${i}`).classList.remove('show');
+}
+
+async function uploadFile(i){
+  const fs = fileStates[i];
+  if (!fs.file || fs.uploadStatus === 'uploading') return;
+  const input = document.getElementById(`file-${i}`);
+  const uploadBtn = document.getElementById(`file-upload-btn-${i}`);
+  fs.uploadStatus = 'uploading';
+  input.disabled = true; uploadBtn.disabled = true;
+  setFileStatus(i, 'busy', 'Envoi en cours...');
+
+  const fd = new FormData();
+  fd.append('file', fs.file);
+  let res;
+  try{
+    res = await fetch(`/api/public/clarifications/${encodeURIComponent(token)}/questions/${encodeURIComponent(q(i).ref)}/file`, {
+      method: 'POST', body: fd,
+    });
+  }catch(err){
+    fs.uploadStatus = 'upload_error';
+    input.disabled = false; uploadBtn.disabled = false;
+    setFileStatus(i, 'err', MSG_FILE_UPLOAD_ERROR);
+    return;
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok){
+    fs.uploadStatus = 'upload_error';
+    input.disabled = false; uploadBtn.disabled = false;
+    const code = data && data.error && typeof data.error === 'object' ? data.error.code : undefined;
+    setFileStatus(i, 'err', FILE_ERROR_MESSAGES[code] || MSG_FILE_UPLOAD_ERROR);
+    return;
+  }
+  fs.uploadStatus = 'uploaded';
+  fs.fileAnswerId = data && data.file_answer ? data.file_answer.id : null;
+  uploadBtn.disabled = true; // un seul fichier actif à la fois : on repart d'une nouvelle sélection pour changer
+  setFileStatus(i, 'busy', 'Fichier reçu — analyse en cours...');
+  await previewFile(i);
+}
+
+async function previewFile(i){
+  const fs = fileStates[i];
+  fs.previewStatus = 'loading';
+  let res;
+  try{
+    res = await fetch(`/api/public/clarifications/${encodeURIComponent(token)}/questions/${encodeURIComponent(q(i).ref)}/file/preview`, { method: 'POST' });
+  }catch(err){
+    fs.previewStatus = 'preview_error';
+    setFileStatus(i, 'err', MSG_FILE_PREVIEW_ERROR);
+    return;
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok){
+    fs.previewStatus = 'preview_error';
+    const code = data && data.error && typeof data.error === 'object' ? data.error.code : undefined;
+    setFileStatus(i, 'err', FILE_ERROR_MESSAGES[code] || MSG_FILE_PREVIEW_ERROR);
+    return;
+  }
+  const preview = data && data.preview ? data.preview : {};
+  fs.previewStatus = 'loaded';
+  fs.extractionId = preview.extraction_id || null;
+  fs.candidateCount = typeof preview.candidate_count === 'number' ? preview.candidate_count : 0;
+  fs.totalRows = typeof preview.total_rows === 'number' ? preview.total_rows : 0;
+  fs.previewRows = Array.isArray(preview.preview_rows) ? preview.preview_rows : [];
+  fs.warnings = Array.isArray(preview.warnings) ? preview.warnings : [];
+  fs.truncated = !!preview.truncated;
+  fs.confirmable = !!preview.confirmable;
+  fs.validationCode = preview.validation_code || '';
+  setFileStatus(i, '', '');
+  renderPreview(i);
+}
+
+// Grille positionnelle brute (preview_rows[].cells) -> une valeur par ligne pour l'affichage. Jamais
+// une seconde interprétation : si plusieurs cellules existent sur une ligne, elles sont toutes montrées
+// (le backend a déjà statué sur la confirmabilité ; la page ne devine jamais une colonne « la bonne »).
+function renderPreview(i){
+  const fs = fileStates[i];
+  const el = document.getElementById(`preview-${i}`);
+  if (!el) return;
+  if (fs.previewStatus !== 'loaded'){ el.innerHTML = ''; return; }
+  const rows = fs.previewRows.map(r => esc((r.cells || []).join(' — ')));
+  const shownNote = fs.candidateCount > rows.length
+    ? `<div class="preview-summary">${fs.candidateCount} valeur(s) détectée(s) — aperçu des ${rows.length} premières</div>`
+    : `<div class="preview-summary">${fs.candidateCount} valeur(s) détectée(s)</div>`;
+  const warningsHtml = fs.warnings.length
+    ? `<div class="preview-warnings">${fs.warnings.map(w => esc(w)).join('<br>')}</div>` : '';
+  const reasonHtml = !fs.confirmable
+    ? `<div class="file-status err">${esc(FILE_ERROR_MESSAGES[fs.validationCode] || "Ce fichier ne peut pas être confirmé tel quel.")}</div>`
+    : '';
+  el.innerHTML = `
+    <div class="preview-box">
+      ${shownNote}
+      <div class="preview-list">${rows.map(v => `<div>${v}</div>`).join('')}</div>
+      ${warningsHtml}
+    </div>
+    ${reasonHtml}
+    <div class="file-row" style="margin-top:10px;">
+      <button type="button" id="file-confirm-btn-${i}"${!fs.confirmable ? ' disabled' : ''}>Confirmer cette liste</button>
+    </div>
+  `;
+  const btn = document.getElementById(`file-confirm-btn-${i}`);
+  if (btn){
+    btn.addEventListener('click', () => confirmFile(i));
+    // Propriété explicite (jamais seulement l'attribut statique ci-dessus) : c'est elle qui pilote
+    // réellement la soumission dans un vrai navigateur ET ce que les tests observent.
+    btn.disabled = !fs.confirmable;
+  }
+}
+
+async function confirmFile(i){
+  const fs = fileStates[i];
+  if (!fs.confirmable || !fs.extractionId || fs.confirmStatus === 'confirming') return;
+  fs.confirmStatus = 'confirming';
+  const btn = document.getElementById(`file-confirm-btn-${i}`);
+  if (btn){ btn.disabled = true; btn.textContent = 'Confirmation...'; }
+
+  let res;
+  try{
+    res = await fetch(`/api/public/clarifications/${encodeURIComponent(token)}/questions/${encodeURIComponent(q(i).ref)}/file/confirm`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ artifact_extraction_id: fs.extractionId }),
+    });
+  }catch(err){
+    fs.confirmStatus = 'confirm_error';
+    if (btn){ btn.disabled = false; btn.textContent = 'Confirmer cette liste'; }
+    setFileStatus(i, 'err', MSG_FILE_CONFIRM_ERROR);
+    return;
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok){
+    fs.confirmStatus = 'confirm_error';
+    if (btn){ btn.disabled = false; btn.textContent = 'Confirmer cette liste'; }
+    const code = data && data.error && typeof data.error === 'object' ? data.error.code : undefined;
+    if (res.status === 410){ setFinal(`<div class="state error">${esc(MSG_LINK_GONE)}</div>`); return; }
+    if (res.status === 404){ setFinal(`<div class="state error">${esc(MSG_LINK_INVALID)}</div>`); return; }
+    if (res.status === 422 && code === 'REQUEST_NOT_PENDING'){ setFinal(`<div class="state error">${esc(MSG_NOT_PENDING)}</div>`); return; }
+    setFileStatus(i, 'err', FILE_ERROR_MESSAGES[code] || MSG_FILE_CONFIRM_ERROR);
+    return;
+  }
+  fs.confirmStatus = 'confirmed';
+  fs.resolved = true;
+  const confirmation = data && data.confirmation ? data.confirmation : {};
+  // La demande entière devient ANSWERED dès qu'une réponse fichier est confirmée (contrat backend,
+  // RecordFileAnswer mono-question) : état final identique à un succès de réponse texte — jamais une
+  // seconde soumission TEXT/UNKNOWN pour cette même demande (H3-008D1Q36N4A5D66UI1 §13/§14).
+  if (confirmation.clarification_status && confirmation.clarification_status !== 'PENDING'){
+    setFinal(`<div class="state ok">${esc(MSG_SUCCESS)}</div>`);
+    if (window.history && window.history.replaceState){
+      window.history.replaceState({}, document.title, location.pathname);
+    }
+    return;
+  }
+  // Défensif : si la demande reste PENDING (hors du cas mono-question actuel), verrouiller cette
+  // question comme résolue sans jamais la resoumettre via le flow TEXT/UNKNOWN général.
+  const card = document.getElementById(`qcard-${i}`);
+  const block = document.getElementById(`fileblock-${i}`);
+  if (block) block.innerHTML = `<div class="file-done">${esc(MSG_FILE_DONE)}</div>`;
+  const field = q(i).canValue ? document.getElementById(`answer-${i}`) : null;
+  const box = q(i).canUnknown ? document.getElementById(`unknown-${i}`) : null;
+  if (field) field.disabled = true;
+  if (box) box.disabled = true;
+  document.getElementById(`req-${i}`).classList.remove('show');
 }
 
 function showFormError(msg){
@@ -145,11 +518,14 @@ function clearFormError(){
 }
 
 // buildAnswers — transforme la saisie en payload, à partir du modèle `questions` uniquement.
-// Retourne { ok:false } (aucune requête) tant qu'une question n'a ni valeur ni « Je ne sais pas » explicite.
+// Une question déjà résolue par un fichier confirmé (fileStates[i].resolved) n'est JAMAIS incluse ici
+// et ne bloque jamais le reste de la soumission (H3-008D1Q36N4A5D66UI1 §14).
+// Retourne { ok:false } (aucune requête) tant qu'une question restante n'a ni valeur ni « Je ne sais pas ».
 function buildAnswers(){
   const answers = [];
   let ok = true;
   questions.forEach((q, i) => {
+    if (fileStates[i] && fileStates[i].resolved) return;
     const reqEl = document.getElementById(`req-${i}`);
     const box = q.canUnknown ? document.getElementById(`unknown-${i}`) : null;
     const field = q.canValue ? document.getElementById(`answer-${i}`) : null;
@@ -165,6 +541,7 @@ function buildAnswers(){
       answers.push(q.structured ? { question_ref: q.ref, state: STATE_VALUE, text } : { question_ref: q.ref, text });
       return;
     }
+    if (q.canFile && !q.canValue && !q.canUnknown) return; // question FILE-only : seule la confirmation fichier répond
     // Ni valeur, ni « Je ne sais pas » : jamais de requête, jamais d'état déduit d'un champ vide.
     reqEl.textContent = q.canValue ? (q.canUnknown ? MSG_NEED_ANSWER_OR_UNKNOWN : MSG_NEED_ANSWER) : MSG_NEED_UNKNOWN;
     reqEl.classList.add('show');
@@ -177,6 +554,7 @@ async function submit(){
   if (submitting || finished) return;
   const built = buildAnswers();
   if (!built.ok) return;
+  if (built.answers.length === 0) return; // tout a déjà été résolu par fichier : rien à soumettre ici
 
   submitting = true;                       // synchrone : un second clic ne peut pas passer
   const btn = document.getElementById('submit-btn');

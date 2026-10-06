@@ -540,6 +540,60 @@ app.post('/api/public/clarifications/:token/response', async (req, res) => {
   }
 });
 
+// H3-008D1Q36N4A5D66UI1 — proxy public du parcours FICHIER (D66), même frontière que ci-dessus :
+// jamais de secret, la cible (tenant/demande/question) est résolue CÔTÉ GO depuis le seul jeton
+// opaque, jamais depuis un champ fourni ici. Le jeton n'est jamais journalisé.
+//
+// Upload : `express.json` (ligne 15) ne consomme JAMAIS un corps multipart (son content-type ne
+// correspond pas), donc `req` reste un flux brut intact ici — transmis TEL QUEL à Go sans
+// parsing/reconstruction multipart côté Compose (aucune dépendance nouvelle, Go reste l'unique
+// autorité de validation format/taille). `duplex: 'half'` est requis par fetch (Node 18+/undici)
+// dès que `body` est un flux.
+app.post('/api/public/clarifications/:token/questions/:questionRef/file', async (req, res) => {
+  try {
+    const goRes = await fetch(`${PANDORE_API_BASE}/public/clarifications/${encodeURIComponent(req.params.token)}/questions/${encodeURIComponent(req.params.questionRef)}/file`, {
+      method: 'POST',
+      headers: { 'Content-Type': req.headers['content-type'] || 'application/octet-stream' },
+      body: req,
+      duplex: 'half',
+    });
+    const data = await goRes.json().catch(() => ({}));
+    res.status(goRes.status).json(data);
+  } catch (err) {
+    console.error('public clarification file upload proxy:', err.message);
+    res.status(502).json({ error: 'Envoi du fichier impossible pour le moment' });
+  }
+});
+
+app.post('/api/public/clarifications/:token/questions/:questionRef/file/preview', async (req, res) => {
+  try {
+    const goRes = await fetch(`${PANDORE_API_BASE}/public/clarifications/${encodeURIComponent(req.params.token)}/questions/${encodeURIComponent(req.params.questionRef)}/file/preview`, {
+      method: 'POST',
+    });
+    const data = await goRes.json().catch(() => ({}));
+    res.status(goRes.status).json(data);
+  } catch (err) {
+    console.error('public clarification file preview proxy:', err.message);
+    res.status(502).json({ error: "Analyse du fichier impossible pour le moment" });
+  }
+});
+
+app.post('/api/public/clarifications/:token/questions/:questionRef/file/confirm', async (req, res) => {
+  const artifactExtractionId = req.body && typeof req.body.artifact_extraction_id === 'string' ? req.body.artifact_extraction_id : '';
+  try {
+    const goRes = await fetch(`${PANDORE_API_BASE}/public/clarifications/${encodeURIComponent(req.params.token)}/questions/${encodeURIComponent(req.params.questionRef)}/file/confirm`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ artifact_extraction_id: artifactExtractionId }),
+    });
+    const data = await goRes.json().catch(() => ({}));
+    res.status(goRes.status).json(data);
+  } catch (err) {
+    console.error('public clarification file confirm proxy:', err.message);
+    res.status(502).json({ error: 'Confirmation impossible pour le moment' });
+  }
+});
+
 app.post('/api/auth/logout', async (req, res) => {
   if (!checkAdmin(req, res)) return;
   const authorization = req.get('Authorization');
