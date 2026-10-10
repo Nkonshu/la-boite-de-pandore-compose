@@ -465,6 +465,30 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
+// H3-008D1Q36N4A5D68T — proxy public minimal vers /auth/accept-invitation (Go), pour la page publique
+// accept-invitation/index.html. PAS de checkAdmin (contrairement à /api/auth/login ci-dessus) : la
+// personne invitée n'a et ne doit avoir aucun accès admin — la preuve est le jeton opaque du corps de
+// requête lui-même, jamais un mot de passe admin. Ne transmet QUE les deux champs réellement exigés par le
+// contrat Go (token, password) — jamais tenant_id/role/email, que Go dérive déjà de l'invitation. Ni le
+// jeton ni le mot de passe ne sont jamais journalisés (voir le reste de ce fichier : aucun middleware de
+// log de requête n'existe, et ce handler ne logue explicitement que err.message, jamais req.body).
+app.post('/api/auth/accept-invitation', async (req, res) => {
+  const { token, password } = req.body || {};
+  if (!token || !password) return res.status(400).json({ error: 'token et password requis' });
+  try {
+    const goRes = await fetch(`${PANDORE_API_BASE}/auth/accept-invitation`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, password }),
+    });
+    const data = await goRes.json().catch(() => ({}));
+    res.status(goRes.status).json(data);
+  } catch (err) {
+    console.error('accept invitation proxy:', err.message);
+    res.status(502).json({ error: 'Acceptation impossible pour le moment' });
+  }
+});
+
 // Tranche F — proxies publics minimaux vers /public/contacts et
 // /public/plans (Go). Aucun secret ici : la preuve est le jeton opaque
 // lui-même, la cible est toujours résolue serveur-side côté Go (jamais un

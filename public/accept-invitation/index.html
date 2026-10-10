@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex">
+<title>Accepter l'invitation — La Boîte de Pandore</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg?v=2">
+<style>
+  :root { --bg:#0B0D10; --surface:#14171C; --accent:#E8A33D; --good:#3DBD8C; --bad:#E2685A; --text:#F3F1EC; --mute:#8B909A; --border:#262B33; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; -webkit-font-smoothing: antialiased; }
+  h1 { font-size: 22px; font-weight: 700; margin: 0 0 10px; line-height: 1.3; }
+  .wrap { max-width: 420px; margin: 0 auto; padding: 70px 24px 90px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 32px 28px; }
+  .icon { font-size: 36px; margin-bottom: 16px; text-align: center; }
+  p { color: var(--mute); line-height: 1.6; margin: 0 0 18px; font-size: 14.5px; }
+  .ok h1 { color: var(--good); text-align: center; }
+  .ko h1 { color: var(--bad); text-align: center; }
+  .ok p, .ko p { text-align: center; }
+  label { display: block; font-size: 13px; color: var(--mute); margin-bottom: 6px; font-weight: 600; }
+  input[type=password] { width: 100%; background: #0F1216; color: var(--text); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; font-family: inherit; font-size: 15px; margin-bottom: 6px; }
+  input[type=password]:focus { outline: none; border-color: var(--accent); }
+  .hint { font-size: 12px; color: var(--mute); margin-bottom: 18px; }
+  button { font-family: inherit; font-size: 14.5px; font-weight: 600; padding: 13px 18px; border-radius: 10px; border: 1px solid var(--accent); cursor: pointer; background: var(--accent); color: #1A1300; width: 100%; }
+  button:hover:not(:disabled) { filter: brightness(1.08); }
+  button:disabled { opacity: 0.6; cursor: default; }
+  .error-region { color: var(--bad); font-size: 13.5px; margin-top: 12px; min-height: 1px; }
+  .state { text-align: center; padding: 90px 24px; color: var(--mute); }
+  .state.error { color: var(--bad); }
+  @media (max-width: 420px) {
+    .wrap { padding: 40px 16px 60px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap"><div id="app"><div class="state">Chargement...</div></div></div>
+<script>
+function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+// §5/§6 du mandat D68T — le jeton voyage UNIQUEMENT dans le fragment (#token=...), jamais la query string
+// ni le path : le fragment n'est jamais envoyé au serveur HTTP (ni logs d'accès, ni logs de reverse-proxy,
+// ni analytics d'URL). Lu une seule fois en mémoire, puis le fragment est immédiatement retiré de la barre
+// d'adresse (history.replaceState) — jamais stocké dans localStorage/sessionStorage/cookies/IndexedDB/un
+// attribut data-* du DOM, jamais journalisé (aucun console.log de sa valeur, ici ni ailleurs dans ce
+// fichier).
+function extractTokenFromFragment(){
+  const hash = location.hash || '';
+  const match = /(?:^#|&)token=([^&]+)/.exec(hash);
+  const token = match ? decodeURIComponent(match[1]) : '';
+  if (location.hash) {
+    history.replaceState(null, '', location.pathname + location.search);
+  }
+  return token;
+}
+
+const app = document.getElementById('app');
+const token = extractTokenFromFragment();
+
+function renderInvalidLink(){
+  app.className = 'ko';
+  app.innerHTML = `
+    <div class="card">
+      <div class="icon">⚠️</div>
+      <h1>Lien d'invitation invalide ou incomplet</h1>
+      <p>Vérifiez que vous avez bien copié le lien complet reçu par email, ou demandez une nouvelle invitation.</p>
+    </div>`;
+}
+
+function renderSuccess(){
+  app.className = 'ok';
+  app.innerHTML = `
+    <div class="card">
+      <div class="icon">✓</div>
+      <h1>Invitation acceptée</h1>
+      <p>Votre compte a été créé. Vous pouvez maintenant vous connecter normalement avec votre adresse email et le mot de passe que vous venez de choisir.</p>
+    </div>`;
+}
+
+// renderForm — formulaire de choix du mot de passe. Jamais pré-rempli, jamais stocké au-delà de la
+// variable locale `password` (effacée après l'envoi, succès ou échec), jamais journalisé.
+function renderForm(errorMessage){
+  app.className = '';
+  app.innerHTML = `
+    <div class="card">
+      <h1>Accepter l'invitation</h1>
+      <p>Choisissez le mot de passe de votre compte Pandore.</p>
+      <form id="accept-form" autocomplete="off">
+        <label for="password">Mot de passe</label>
+        <input type="password" id="password" name="password" autocomplete="new-password" minlength="8" required>
+        <div class="hint">8 caractères minimum.</div>
+        <button type="submit" id="submit-btn">Accepter l'invitation</button>
+        <div class="error-region" id="error-region">${errorMessage ? esc(errorMessage) : ''}</div>
+      </form>
+    </div>`;
+  const form = document.getElementById('accept-form');
+  form.addEventListener('submit', onSubmit);
+}
+
+// clientSafeErrorMessage — traduction humaine des codes/erreurs backend réels (jamais de JSON brut, jamais
+// le jeton). Les deux cas 422 du contrat Go (mot de passe trop court vs invitation déjà acceptée/expirée)
+// partagent le même code HTTP mais des messages distincts (voir internal/httpapi/auth.go côté backend) —
+// distingués ici uniquement par leur contenu, jamais devinés.
+function clientSafeErrorMessage(status, backendMessage){
+  const msg = (backendMessage || '').toLowerCase();
+  if (status === 404) {
+    return "Ce lien d'invitation est introuvable. Il a peut-être déjà été utilisé ou n'est plus valide.";
+  }
+  if (status === 409) {
+    return 'Un compte existe déjà pour cette adresse email. Contactez la personne qui vous a invité.';
+  }
+  if (status === 422 && msg.includes('mot de passe')) {
+    return 'Mot de passe trop court (8 caractères minimum).';
+  }
+  if (status === 422) {
+    return "Cette invitation n'est plus valide (déjà acceptée ou expirée). Demandez une nouvelle invitation.";
+  }
+  return 'Une erreur est survenue. Réessayez dans un instant.';
+}
+
+let submitting = false;
+
+async function onSubmit(ev){
+  ev.preventDefault();
+  if (submitting) return; // garde anti-double-soumission
+  const passwordInput = document.getElementById('password');
+  let password = passwordInput.value;
+  const btn = document.getElementById('submit-btn');
+  const errorRegion = document.getElementById('error-region');
+  submitting = true;
+  btn.disabled = true;
+  btn.textContent = 'Envoi en cours...';
+  errorRegion.textContent = '';
+  try {
+    const res = await fetch('/api/auth/accept-invitation', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, password }),
+    });
+    password = ''; // effacé dès l'envoi, succès ou échec
+    passwordInput.value = '';
+    if (res.ok) {
+      renderSuccess();
+      return;
+    }
+    const data = await res.json().catch(() => ({}));
+    const backendMessage = (data.error && data.error.message) || '';
+    renderForm(clientSafeErrorMessage(res.status, backendMessage));
+  } catch (err) {
+    password = '';
+    passwordInput.value = '';
+    renderForm('Erreur réseau — réessayez dans un instant.');
+  } finally {
+    submitting = false;
+  }
+}
+
+if (!token) {
+  renderInvalidLink();
+} else {
+  renderForm();
+}
+</script>
+</body>
+</html>
