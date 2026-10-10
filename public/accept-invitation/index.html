@@ -65,7 +65,7 @@ function renderInvalidLink(){
     <div class="card">
       <div class="icon">⚠️</div>
       <h1>Lien d'invitation invalide ou incomplet</h1>
-      <p>Vérifiez que vous avez bien copié le lien complet reçu par email, ou demandez une nouvelle invitation.</p>
+      <p>Vérifiez que vous avez bien copié le lien complet reçu par email. Si le problème persiste, contactez la personne qui vous a invité afin qu'elle puisse vous renvoyer l'invitation.</p>
     </div>`;
 }
 
@@ -115,7 +115,7 @@ function clientSafeErrorMessage(status, backendMessage){
     return 'Mot de passe trop court (8 caractères minimum).';
   }
   if (status === 422) {
-    return "Cette invitation n'est plus valide (déjà acceptée ou expirée). Demandez une nouvelle invitation.";
+    return "Cette invitation n'est plus valide (déjà acceptée ou expirée). Contactez la personne qui vous a invité afin qu'elle puisse vous renvoyer l'invitation.";
   }
   return 'Une erreur est survenue. Réessayez dans un instant.';
 }
