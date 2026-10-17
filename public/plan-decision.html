@@ -159,6 +159,18 @@ const DECISION_COPY = {
     changesPrompt: 'Qu’aimeriez-vous ajuster ?',
     reject: 'Cette orientation ne me convient pas',
   },
+  // CONTENT — H3-008D1Q36N4A5D68EC : la garantie reflète exactement le
+  // comportement réel du backend (contentreview.SubmitDecision, audité
+  // D68EA) — une approbation ne crée jamais de PublicationIntent, ne
+  // publie jamais automatiquement ; c'est toujours un acte séparé.
+  CONTENT: {
+    guarantee: `En approuvant ce contenu, vous confirmez qu'il peut être utilisé tel quel.<br>
+      Cela n'entraîne aucune publication automatique — la mise en ligne reste une étape séparée, décidée par l'équipe Pandore.`,
+    question: 'Ce contenu vous convient-il ?',
+    approve: 'Oui, ce contenu me convient',
+    changesPrompt: 'Qu’aimeriez-vous modifier ?',
+    reject: 'Ce contenu ne me convient pas',
+  },
 };
 
 function renderDecisionArea(decisionScopeText, kind){
@@ -293,6 +305,48 @@ function renderEditorial(p){
   wireDecisionArea();
 }
 
+// --- Rendu "CONTENT" (Content Review & Client Approval Gate, H3-005/
+// H3-008D1Q36N4A5D68EC) — champs STRICTEMENT limités à ce que le backend
+// fournit (toPublicContentReviewView, Go) : kind/status/version/platform/
+// format/hook/body/cta/caption. Jamais de content_id/tenant_id/
+// generation_request_id/trace affichés — ces champs n'existent même pas
+// dans la réponse publique.
+function renderContentIntro(){
+  return `
+    <div class="eyebrow">Contenu à valider</div>
+    <h1>Voici le contenu que Pandore propose de publier</h1>
+    <div class="intro">Prenez quelques minutes pour vérifier que ce contenu vous convient avant sa mise en ligne.</div>
+  `;
+}
+
+// Garde §37 (D68EC) : une réponse kind=CONTENT sans hook/body ne doit
+// jamais être affichée comme une review valide et vide — fail-safe
+// explicite, aucun formulaire de décision proposé dans ce cas.
+function renderContent(p){
+  if(!p || !p.hook || !p.body){
+    app.innerHTML = '<div class="state error">Contenu incomplet reçu — contactez l’équipe Pandore.</div>';
+    return;
+  }
+  document.title = 'Contenu à valider — La Boîte de Pandore';
+  app.innerHTML = `
+    ${renderContentIntro()}
+
+    <div class="summary-card">
+      <div class="summary-row"><div class="summary-label">Version</div><div class="summary-value">${esc(p.version)}</div></div>
+      <div class="summary-row"><div class="summary-label">Plateforme</div><div class="summary-value">${esc(p.platform)}</div></div>
+      <div class="summary-row"><div class="summary-label">Format</div><div class="summary-value">${esc(p.format)}</div></div>
+    </div>
+
+    <div class="section"><h3>Accroche (hook)</h3><p>${esc(p.hook)}</p></div>
+    <div class="section"><h3>Texte</h3><p>${esc(p.body)}</p></div>
+    ${p.cta ? `<div class="section"><h3>Appel à l'action (CTA)</h3><p>${esc(p.cta)}</p></div>` : ''}
+    ${p.caption ? `<div class="section"><h3>Légende</h3><p>${esc(p.caption)}</p></div>` : ''}
+
+    ${renderDecisionArea('', 'CONTENT')}
+  `;
+  wireDecisionArea();
+}
+
 // Messages client-safe pour un statut déjà décidé — jamais la valeur brute
 // de l'enum backend affichée telle quelle (CHANGES_REQUESTED/APPROVED/
 // REJECTED/EXPIRED/PENDING ne doivent jamais apparaître à l'écran).
@@ -308,7 +362,14 @@ const PENDING_STATUS_BY_KIND = {
   PRESENTATION: 'SENT',
   LEGACY: 'SENT',
   EDITORIAL_REVIEW_PRESENTATION: 'PENDING',
+  CONTENT: 'PENDING',
 };
+
+// KNOWN_KINDS — H3-008D1Q36N4A5D68EC §8 : allowlist explicite. Un kind
+// absent de cette liste n'est JAMAIS rendu par défaut comme un Plan
+// (ancien comportement dangereux, voir D68EB) — load() affiche un message
+// sûr et s'arrête avant même de consulter PENDING_STATUS_BY_KIND.
+const KNOWN_KINDS = ['PRESENTATION', 'LEGACY', 'EDITORIAL_REVIEW_PRESENTATION', 'CONTENT'];
 
 const STATUS_MESSAGES = {
   PRESENTATION: {
@@ -321,6 +382,12 @@ const STATUS_MESSAGES = {
     APPROVED: 'Vous avez approuvé cette orientation éditoriale.',
     CHANGES_REQUESTED: 'Votre demande d’ajustement a bien été enregistrée. Pandore en tiendra compte pour la suite.',
     REJECTED: 'Vous avez indiqué que cette orientation ne vous convient pas. Votre retour a bien été enregistré.',
+    EXPIRED: "Ce lien n'est plus actif.",
+  },
+  CONTENT: {
+    APPROVED: 'Vous avez approuvé ce contenu.',
+    CHANGES_REQUESTED: 'Votre demande de modification a bien été enregistrée. Pandore préparera une nouvelle version en tenant compte de votre retour.',
+    REJECTED: 'Vous avez indiqué que ce contenu ne vous convient pas. Votre retour a bien été enregistré.',
     EXPIRED: "Ce lien n'est plus actif.",
   },
 };
@@ -378,8 +445,16 @@ async function load(){
     }
     if(!res.ok) throw new Error('load_failed');
     const data = await res.json();
-    currentKind = data.kind || 'PRESENTATION';
-    const pendingStatus = PENDING_STATUS_BY_KIND[currentKind] || 'SENT';
+    currentKind = data.kind || '';
+    // H3-008D1Q36N4A5D68EC §8 : un kind réellement inconnu (pas encore
+    // supporté par cette page) ne doit jamais être traité par défaut
+    // comme un Plan — c'est exactement ce qui causait "Ce lien n'est
+    // plus actif." pour kind="CONTENT" avant ce correctif (D68EB).
+    if(!KNOWN_KINDS.includes(currentKind)){
+      app.innerHTML = '<div class="state error">Ce type de demande n’est pas pris en charge par cette page. Contactez l’équipe Pandore.</div>';
+      return;
+    }
+    const pendingStatus = PENDING_STATUS_BY_KIND[currentKind];
     if(data.status !== pendingStatus){
       app.innerHTML = `<div class="state">${esc(clientSafeStatusMessage(data.status, currentKind))}</div>`;
       return;
@@ -388,6 +463,8 @@ async function load(){
       renderEditorial(data);
     } else if(currentKind === 'PRESENTATION'){
       renderPresentation(data);
+    } else if(currentKind === 'CONTENT'){
+      renderContent(data);
     } else {
       renderLegacy(data);
     }
